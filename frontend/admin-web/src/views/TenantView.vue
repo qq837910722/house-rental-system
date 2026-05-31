@@ -1,35 +1,289 @@
 <template>
   <div class="tenant-page">
-    <!-- 页面标题 -->
     <div class="page-header">
       <div>
         <h1>租客管理</h1>
-        <p>管理租客基本信息、入住房间、联系方式和租期状态。</p>
+        <p>管理租客基本信息、入住房间、合同状态和紧急联系人。</p>
       </div>
 
-      <el-button type="primary" @click="openAddDialog">
+      <el-button type="primary" @click="openCreateDialog">
         新增租客
       </el-button>
     </div>
 
-    <!-- 搜索筛选区 -->
-    <el-card class="filter-card">
-      <el-form inline>
-        <el-form-item label="关键词">
+    <div class="summary-grid">
+      <el-card class="summary-card">
+        <div class="summary-title">全部租客</div>
+        <div class="summary-value">{{ tenantList.length }}</div>
+        <div class="summary-desc">系统中的租客总数</div>
+      </el-card>
+
+      <el-card class="summary-card">
+        <div class="summary-title">在租租客</div>
+        <div class="summary-value success">{{ activeTenantCount }}</div>
+        <div class="summary-desc">当前正在租住的租客</div>
+      </el-card>
+
+      <el-card class="summary-card">
+        <div class="summary-title">已退租</div>
+        <div class="summary-value info">{{ retiredTenantCount }}</div>
+        <div class="summary-desc">已经退租的租客</div>
+      </el-card>
+    </div>
+
+    <el-card class="table-card">
+      <template #header>
+        <div class="card-header">
+          <span>租客列表</span>
+
+          <div class="header-actions">
+            <el-input
+              v-model="keyword"
+              placeholder="搜索姓名 / 手机号 / 房间号"
+              clearable
+              style="width: 260px"
+            />
+
+            <el-select
+              v-model="statusFilter"
+              placeholder="租客状态"
+              clearable
+              style="width: 140px"
+            >
+              <el-option label="在租" value="在租" />
+              <el-option label="已退租" value="已退租" />
+            </el-select>
+          </div>
+        </div>
+      </template>
+
+      <el-table
+        :data="filteredTenantList"
+        border
+        style="width: 100%"
+      >
+        <el-table-column prop="name" label="租客姓名" width="120" />
+        <el-table-column prop="phone" label="手机号" width="140" />
+
+        <el-table-column label="所属楼栋" min-width="160">
+          <template #default="{ row }">
+            {{ row.building_name || '未绑定' }}
+          </template>
+        </el-table-column>
+
+        <el-table-column label="房间号" width="100">
+          <template #default="{ row }">
+            {{ row.room_number || '未绑定' }}
+          </template>
+        </el-table-column>
+
+        <el-table-column label="房型" width="120">
+          <template #default="{ row }">
+            {{ row.room_type || '-' }}
+          </template>
+        </el-table-column>
+
+        <el-table-column label="月租金" width="110">
+          <template #default="{ row }">
+            <span v-if="row.monthly_rent">¥{{ row.monthly_rent }}</span>
+            <span v-else class="muted-text">-</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="租期" min-width="210">
+          <template #default="{ row }">
+            <span v-if="row.lease_start && row.lease_end">
+              {{ formatDate(row.lease_start) }} ~ {{ formatDate(row.lease_end) }}
+            </span>
+            <span v-else class="muted-text">暂无租期</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="合同状态" width="110">
+          <template #default="{ row }">
+            <el-tag
+              v-if="row.contract_status"
+              :type="getContractStatusType(row.contract_status)"
+            >
+              {{ row.contract_status }}
+            </el-tag>
+            <span v-else class="muted-text">无合同</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="租客状态" width="110">
+          <template #default="{ row }">
+            <el-tag :type="getTenantStatusType(row.status)">
+              {{ row.status }}
+            </el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="紧急联系人" width="130">
+          <template #default="{ row }">
+            {{ row.emergency_contact || '-' }}
+          </template>
+        </el-table-column>
+
+        <el-table-column
+          label="操作"
+          width="220"
+          fixed="right"
+        >
+          <template #default="{ row }">
+            <el-button size="small" @click="openDetail(row)">
+              查看
+            </el-button>
+
+            <el-button size="small" @click="openEditDialog(row)">
+              编辑
+            </el-button>
+
+            <el-button size="small" type="danger" @click="deleteTenant(row)">
+              删除
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <el-dialog
+      v-model="detailVisible"
+      title="租客详情"
+      width="760px"
+    >
+      <div v-if="currentTenant">
+        <el-descriptions
+          border
+          :column="2"
+        >
+          <el-descriptions-item label="租客姓名">
+            {{ currentTenant.name }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="手机号">
+            {{ currentTenant.phone }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="身份证号">
+            {{ currentTenant.id_card || '-' }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="登录账号">
+            {{ currentTenant.username || '-' }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="所属楼栋">
+            {{ currentTenant.building_name || '-' }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="房间号">
+            {{ currentTenant.room_number || '-' }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="房型">
+            {{ currentTenant.room_type || '-' }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="月租金">
+            <span v-if="currentTenant.monthly_rent">
+              ¥{{ currentTenant.monthly_rent }}
+            </span>
+            <span v-else>-</span>
+          </el-descriptions-item>
+
+          <el-descriptions-item label="押金">
+            <span v-if="currentTenant.deposit">
+              ¥{{ currentTenant.deposit }}
+            </span>
+            <span v-else>-</span>
+          </el-descriptions-item>
+
+          <el-descriptions-item label="合同编号">
+            {{ currentTenant.contract_no || '-' }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="合同状态">
+            <el-tag
+              v-if="currentTenant.contract_status"
+              :type="getContractStatusType(currentTenant.contract_status)"
+            >
+              {{ currentTenant.contract_status }}
+            </el-tag>
+            <span v-else>-</span>
+          </el-descriptions-item>
+
+          <el-descriptions-item label="租期">
+            <span v-if="currentTenant.contract_start_date && currentTenant.contract_end_date">
+              {{ formatDate(currentTenant.contract_start_date) }}
+              ~
+              {{ formatDate(currentTenant.contract_end_date) }}
+            </span>
+            <span v-else>-</span>
+          </el-descriptions-item>
+
+          <el-descriptions-item label="紧急联系人">
+            {{ currentTenant.emergency_contact || '-' }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="紧急联系电话">
+            {{ currentTenant.emergency_phone || '-' }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="租客状态">
+            <el-tag :type="getTenantStatusType(currentTenant.status)">
+              {{ currentTenant.status }}
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+
+      <template #footer>
+        <el-button @click="detailVisible = false">
+          关闭
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="dialogVisible"
+      :title="dialogMode === 'create' ? '新增租客' : '编辑租客'"
+      width="760px"
+      :close-on-click-modal="false"
+    >
+      <el-form
+        ref="formRef"
+        :model="tenantForm"
+        :rules="rules"
+        label-width="110px"
+      >
+        <el-form-item label="租客姓名" prop="name">
           <el-input
-            v-model="searchKeyword"
-            placeholder="请输入姓名或手机号"
-            clearable
-            style="width: 220px"
+            v-model="tenantForm.name"
+            placeholder="请输入租客姓名"
           />
         </el-form-item>
 
-        <el-form-item label="楼栋">
+        <el-form-item label="手机号" prop="phone">
+          <el-input
+            v-model="tenantForm.phone"
+            placeholder="请输入手机号"
+          />
+        </el-form-item>
+
+        <el-form-item label="身份证号">
+          <el-input
+            v-model="tenantForm.id_card"
+            placeholder="请输入身份证号"
+          />
+        </el-form-item>
+
+        <el-form-item label="所属楼栋">
           <el-select
-            v-model="buildingFilter"
-            placeholder="请选择楼栋"
+            v-model="tenantForm.building_id"
+            placeholder="请选择所属楼栋"
+            style="width: 100%"
             clearable
-            style="width: 180px"
           >
             <el-option
               v-for="building in buildingList"
@@ -40,165 +294,40 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="状态">
+        <el-form-item label="房间号">
+          <el-input
+            v-model="tenantForm.room_number"
+            placeholder="例如：102。为空则表示暂不绑定房间"
+          />
+        </el-form-item>
+
+        <el-form-item label="紧急联系人">
+          <el-input
+            v-model="tenantForm.emergency_contact"
+            placeholder="请输入紧急联系人"
+          />
+        </el-form-item>
+
+        <el-form-item label="紧急联系电话">
+          <el-input
+            v-model="tenantForm.emergency_phone"
+            placeholder="请输入紧急联系电话"
+          />
+        </el-form-item>
+
+        <el-form-item label="租客状态" prop="status">
           <el-select
-            v-model="statusFilter"
-            placeholder="请选择状态"
-            clearable
-            style="width: 160px"
+            v-model="tenantForm.status"
+            style="width: 100%"
           >
             <el-option label="在租" value="在租" />
-            <el-option label="即将到期" value="即将到期" />
             <el-option label="已退租" value="已退租" />
           </el-select>
         </el-form-item>
-      </el-form>
-    </el-card>
 
-    <!-- 租客列表 -->
-    <el-card class="table-card">
-      <el-table :data="filteredTenantList" border style="width: 100%">
-        <el-table-column prop="name" label="姓名" width="120" />
-
-        <el-table-column prop="phone" label="手机号" width="150" />
-
-        <el-table-column prop="buildingName" label="所属楼栋" width="160" />
-
-        <el-table-column prop="roomNumber" label="房间号" width="100" />
-
-        <el-table-column label="租期" min-width="220">
-          <template #default="scope">
-            {{ scope.row.leaseStart }} ～ {{ scope.row.leaseEnd }}
-          </template>
-        </el-table-column>
-
-        <el-table-column prop="emergencyContact" label="紧急联系人" width="140" />
-
-        <el-table-column prop="emergencyPhone" label="紧急联系电话" width="160" />
-
-        <el-table-column prop="status" label="状态" width="120">
-          <template #default="scope">
-            <el-tag :type="getStatusType(scope.row.status)">
-              {{ scope.row.status }}
-            </el-tag>
-          </template>
-        </el-table-column>
-
-        <el-table-column label="操作" width="180">
-          <template #default="scope">
-            <el-button size="small" @click="openEditDialog(scope.row)">
-              编辑
-            </el-button>
-
-            <el-button
-              size="small"
-              type="danger"
-              @click="deleteTenant(scope.row.id)"
-            >
-              删除
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-
-    <!-- 新增 / 编辑弹窗 -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="isEdit ? '编辑租客' : '新增租客'"
-      width="760px"
-      top="8vh"
-    >
-      <el-form label-width="110px">
-        <div class="form-layout">
-          <!-- 左侧：租客基本信息 -->
-          <div class="form-column">
-            <el-form-item label="姓名" required>
-              <el-input v-model="form.name" placeholder="请输入租客姓名" />
-            </el-form-item>
-
-            <el-form-item label="手机号" required>
-              <el-input v-model="form.phone" placeholder="请输入手机号" />
-            </el-form-item>
-
-            <el-form-item label="证件号"required>
-              <el-input v-model="form.idCard" placeholder="请输入身份证/证件号" />
-            </el-form-item>
-
-            <el-form-item label="紧急联系人">
-              <el-input v-model="form.emergencyContact" placeholder="请输入紧急联系人" />
-            </el-form-item>
-
-            <el-form-item label="紧急电话">
-              <el-input v-model="form.emergencyPhone" placeholder="请输入紧急联系电话" />
-            </el-form-item>
-          </div>
-
-          <!-- 右侧：入住信息 -->
-          <div class="form-column">
-            <el-form-item label="所属楼栋" required>
-              <el-select
-                v-model="form.buildingId"
-                placeholder="请选择楼栋"
-                style="width: 100%"
-                @change="handleBuildingChange"
-              >
-                <el-option
-                  v-for="building in buildingList"
-                  :key="building.id"
-                  :label="building.name"
-                  :value="building.id"
-                />
-              </el-select>
-            </el-form-item>
-
-            <el-form-item label="房间号" required>
-              <el-select
-                v-model="form.roomNumber"
-                placeholder="请选择房间"
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="room in availableRoomList"
-                  :key="room.roomNumber"
-                  :label="room.roomNumber"
-                  :value="room.roomNumber"
-                />
-              </el-select>
-            </el-form-item>
-
-            <el-form-item label="租期开始" required>
-              <el-date-picker
-                v-model="form.leaseStart"
-                type="date"
-                placeholder="选择开始日期"
-                value-format="YYYY-MM-DD"
-                style="width: 100%"
-              />
-            </el-form-item>
-
-            <el-form-item label="租期结束" required>
-              <el-date-picker
-                v-model="form.leaseEnd"
-                type="date"
-                placeholder="选择结束日期"
-                value-format="YYYY-MM-DD"
-                style="width: 100%"
-              />
-            </el-form-item>
-
-            <el-form-item label="状态" required>
-              <el-select
-                v-model="form.status"
-                placeholder="请选择状态"
-                style="width: 100%"
-              >
-                <el-option label="在租" value="在租" />
-                <el-option label="即将到期" value="即将到期" />
-                <el-option label="已退租" value="已退租" />
-              </el-select>
-            </el-form-item>
-          </div>
+        <div class="form-tip">
+          新增租客时，系统会自动创建租客登录账号。默认账号为手机号，默认密码为 123456。
+          如果填写房间号，则必须选择所属楼栋。系统会根据“楼栋 + 房间号”绑定房间。
         </div>
       </el-form>
 
@@ -207,7 +336,7 @@
           取消
         </el-button>
 
-        <el-button type="primary" @click="submitForm">
+        <el-button type="primary" @click="submitTenant">
           确认
         </el-button>
       </template>
@@ -216,245 +345,237 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import request from '../utils/request'
 
-// 楼栋数据：后面可以和房屋管理共用数据库
-const buildingList = ref([
-  {
-    id: 'building-1',
-    name: '紫霞公寓1号楼',
-  },
-  {
-    id: 'building-2',
-    name: '紫霞公寓2号楼',
-  },
-])
+const tenantList = ref([])
+const buildingList = ref([])
 
-// 房间数据：现在先写死，后面从房屋管理/后端获取
-const roomList = ref([
-  {
-    buildingId: 'building-1',
-    roomNumber: '101',
-  },
-  {
-    buildingId: 'building-1',
-    roomNumber: '102',
-  },
-  {
-    buildingId: 'building-2',
-    roomNumber: '201',
-  },
-])
-
-// 租客列表：前端假数据
-const tenantList = ref([
-  {
-    id: 1,
-    name: '张三',
-    phone: '13800000001',
-    idCard: '110101199901010011',
-    buildingId: 'building-1',
-    buildingName: '紫霞公寓1号楼',
-    roomNumber: '101',
-    leaseStart: '2026-04-01',
-    leaseEnd: '2027-03-31',
-    emergencyContact: '李四',
-    emergencyPhone: '13900000001',
-    status: '在租',
-  },
-  {
-    id: 2,
-    name: '王五',
-    phone: '13800000002',
-    idCard: '110101199902020022',
-    buildingId: 'building-2',
-    buildingName: '紫霞公寓2号楼',
-    roomNumber: '201',
-    leaseStart: '2026-05-01',
-    leaseEnd: '2027-04-30',
-    emergencyContact: '赵六',
-    emergencyPhone: '13900000002',
-    status: '即将到期',
-  },
-])
-
-const searchKeyword = ref('')
-const buildingFilter = ref('')
+const keyword = ref('')
 const statusFilter = ref('')
 
+const detailVisible = ref(false)
 const dialogVisible = ref(false)
-const isEdit = ref(false)
+const dialogMode = ref('create')
+const currentTenant = ref(null)
+const formRef = ref(null)
 
-const form = reactive({
+const tenantForm = reactive({
   id: null,
   name: '',
   phone: '',
-  idCard: '',
-  buildingId: '',
-  roomNumber: '',
-  leaseStart: '',
-  leaseEnd: '',
-  emergencyContact: '',
-  emergencyPhone: '',
-  status: '',
+  id_card: '',
+  building_id: '',
+  room_number: '',
+  emergency_contact: '',
+  emergency_phone: '',
+  status: '在租',
 })
 
-// 当前楼栋下的房间
-const availableRoomList = computed(() => {
-  if (!form.buildingId) {
-    return []
+const rules = {
+  name: [
+    { required: true, message: '请输入租客姓名', trigger: 'blur' },
+  ],
+  phone: [
+    { required: true, message: '请输入手机号', trigger: 'blur' },
+  ],
+  status: [
+    { required: true, message: '请选择租客状态', trigger: 'change' },
+  ],
+}
+
+const activeTenantCount = computed(() => {
+  return tenantList.value.filter((item) => item.status === '在租').length
+})
+
+const retiredTenantCount = computed(() => {
+  return tenantList.value.filter((item) => item.status === '已退租').length
+})
+
+const filteredTenantList = computed(() => {
+  let list = [...tenantList.value]
+
+  if (statusFilter.value) {
+    list = list.filter((item) => item.status === statusFilter.value)
   }
 
-  return roomList.value.filter((room) => room.buildingId === form.buildingId)
+  if (keyword.value) {
+    const key = keyword.value.trim()
+
+    list = list.filter((item) => {
+      return (
+        String(item.name || '').includes(key) ||
+        String(item.phone || '').includes(key) ||
+        String(item.room_number || '').includes(key) ||
+        String(item.building_name || '').includes(key)
+      )
+    })
+  }
+
+  return list
 })
 
-// 搜索筛选后的租客列表
-const filteredTenantList = computed(() => {
-  return tenantList.value.filter((tenant) => {
-    const keywordMatch =
-      !searchKeyword.value ||
-      tenant.name.includes(searchKeyword.value) ||
-      tenant.phone.includes(searchKeyword.value)
+const getTenantList = async () => {
+  try {
+    const res = await request.get('/tenants')
 
-    const buildingMatch =
-      !buildingFilter.value ||
-      tenant.buildingId === buildingFilter.value
+    if (res.code === 200) {
+      tenantList.value = res.data
+    }
+  } catch (error) {
+    console.error('获取租客列表失败：', error)
+    ElMessage.error('获取租客列表失败，请确认后端是否启动')
+  }
+}
 
-    const statusMatch =
-      !statusFilter.value ||
-      tenant.status === statusFilter.value
+const getBuildingList = async () => {
+  try {
+    const res = await request.get('/buildings')
 
-    return keywordMatch && buildingMatch && statusMatch
-  })
+    if (res.code === 200) {
+      buildingList.value = res.data
+    }
+  } catch (error) {
+    console.error('获取楼栋列表失败：', error)
+    ElMessage.error('获取楼栋列表失败，请确认后端是否启动')
+  }
+}
+
+onMounted(() => {
+  getTenantList()
+  getBuildingList()
 })
 
-const getBuildingName = (buildingId) => {
-  const building = buildingList.value.find((item) => item.id === buildingId)
-  return building ? building.name : ''
+const openDetail = (row) => {
+  currentTenant.value = row
+  detailVisible.value = true
 }
 
-const handleBuildingChange = () => {
-  form.roomNumber = ''
-}
-
-const resetForm = () => {
-  form.id = null
-  form.name = ''
-  form.phone = ''
-  form.idCard = ''
-  form.buildingId = ''
-  form.roomNumber = ''
-  form.leaseStart = ''
-  form.leaseEnd = ''
-  form.emergencyContact = ''
-  form.emergencyPhone = ''
-  form.status = ''
-}
-
-const openAddDialog = () => {
-  isEdit.value = false
+const openCreateDialog = () => {
+  dialogMode.value = 'create'
   resetForm()
   dialogVisible.value = true
 }
 
 const openEditDialog = (row) => {
-  isEdit.value = true
+  dialogMode.value = 'edit'
 
-  form.id = row.id
-  form.name = row.name
-  form.phone = row.phone
-  form.idCard = row.idCard
-  form.buildingId = row.buildingId
-  form.roomNumber = row.roomNumber
-  form.leaseStart = row.leaseStart
-  form.leaseEnd = row.leaseEnd
-  form.emergencyContact = row.emergencyContact
-  form.emergencyPhone = row.emergencyPhone
-  form.status = row.status
+  tenantForm.id = row.id
+  tenantForm.name = row.name
+  tenantForm.phone = row.phone
+  tenantForm.id_card = row.id_card || ''
+  tenantForm.building_id = row.building_id || ''
+  tenantForm.room_number = row.room_number || ''
+  tenantForm.emergency_contact = row.emergency_contact || ''
+  tenantForm.emergency_phone = row.emergency_phone || ''
+  tenantForm.status = row.status || '在租'
 
   dialogVisible.value = true
 }
 
-const submitForm = () => {
-  if (
-    !form.name ||
-    !form.phone ||
-    !form.buildingId ||
-    !form.roomNumber ||
-    !form.leaseStart ||
-    !form.leaseEnd ||
-    !form.status
-  ) {
-    ElMessage.warning('请填写必填项：姓名、手机号、楼栋、房间、租期和状态')
+const resetForm = () => {
+  tenantForm.id = null
+  tenantForm.name = ''
+  tenantForm.phone = ''
+  tenantForm.id_card = ''
+  tenantForm.building_id = ''
+  tenantForm.room_number = ''
+  tenantForm.emergency_contact = ''
+  tenantForm.emergency_phone = ''
+  tenantForm.status = '在租'
+
+  if (formRef.value) {
+    formRef.value.clearValidate()
+  }
+}
+
+const submitTenant = async () => {
+  if (!formRef.value) {
     return
   }
 
-  if (isEdit.value) {
-    const index = tenantList.value.findIndex((item) => item.id === form.id)
-
-    if (index !== -1) {
-      tenantList.value[index] = {
-        id: form.id,
-        name: form.name,
-        phone: form.phone,
-        idCard: form.idCard,
-        buildingId: form.buildingId,
-        buildingName: getBuildingName(form.buildingId),
-        roomNumber: form.roomNumber,
-        leaseStart: form.leaseStart,
-        leaseEnd: form.leaseEnd,
-        emergencyContact: form.emergencyContact,
-        emergencyPhone: form.emergencyPhone,
-        status: form.status,
-      }
+  await formRef.value.validate(async (valid) => {
+    if (!valid) {
+      return
     }
 
-    ElMessage.success('租客信息修改成功')
-  } else {
-    tenantList.value.push({
-      id: Date.now(),
-      name: form.name,
-      phone: form.phone,
-      idCard: form.idCard,
-      buildingId: form.buildingId,
-      buildingName: getBuildingName(form.buildingId),
-      roomNumber: form.roomNumber,
-      leaseStart: form.leaseStart,
-      leaseEnd: form.leaseEnd,
-      emergencyContact: form.emergencyContact,
-      emergencyPhone: form.emergencyPhone,
-      status: form.status,
-    })
+    if (tenantForm.room_number && !tenantForm.building_id) {
+      ElMessage.warning('填写房间号时，请先选择所属楼栋')
+      return
+    }
 
-    ElMessage.success('新增租客成功')
-  }
+    const tenantData = {
+      name: tenantForm.name,
+      phone: tenantForm.phone,
+      id_card: tenantForm.id_card,
+      building_id: tenantForm.building_id,
+      room_number: tenantForm.room_number,
+      emergency_contact: tenantForm.emergency_contact,
+      emergency_phone: tenantForm.emergency_phone,
+      status: tenantForm.status,
+    }
 
-  dialogVisible.value = false
-}
+    try {
+      if (dialogMode.value === 'create') {
+        const res = await request.post('/tenants', tenantData)
 
-const deleteTenant = (id) => {
-  ElMessageBox.confirm('确定要删除这个租客吗？', '删除确认', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    type: 'warning',
+        if (res.code === 200) {
+          ElMessage.success('新增租客成功')
+        }
+      } else {
+        const res = await request.put(`/tenants/${tenantForm.id}`, tenantData)
+
+        if (res.code === 200) {
+          ElMessage.success('编辑租客成功')
+        }
+      }
+
+      dialogVisible.value = false
+      await getTenantList()
+    } catch (error) {
+      console.error('保存租客失败：', error)
+
+      const message = error.response?.data?.message || '保存租客失败'
+      ElMessage.error(message)
+    }
   })
-    .then(() => {
-      tenantList.value = tenantList.value.filter((item) => item.id !== id)
-      ElMessage.success('删除成功')
-    })
-    .catch(() => {
-      ElMessage.info('已取消删除')
-    })
 }
 
-const getStatusType = (status) => {
+const deleteTenant = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除租客「${row.name}」吗？删除后相关合同、水电账单、通知确认和工单记录也会删除。`,
+      '删除确认',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+
+    const res = await request.delete(`/tenants/${row.id}`)
+
+    if (res.code === 200) {
+      ElMessage.success('删除成功')
+      await getTenantList()
+    }
+  } catch (error) {
+    if (error === 'cancel') {
+      ElMessage.info('已取消删除')
+      return
+    }
+
+    console.error('删除租客失败：', error)
+
+    const message = error.response?.data?.message || '删除租客失败'
+    ElMessage.error(message)
+  }
+}
+
+const getTenantStatusType = (status) => {
   if (status === '在租') {
     return 'success'
-  }
-
-  if (status === '即将到期') {
-    return 'warning'
   }
 
   if (status === '已退租') {
@@ -463,45 +584,142 @@ const getStatusType = (status) => {
 
   return ''
 }
+
+const getContractStatusType = (status) => {
+  if (status === '生效中') {
+    return 'success'
+  }
+
+  if (status === '待确认') {
+    return 'warning'
+  }
+
+  if (status === '已到期') {
+    return 'info'
+  }
+
+  if (status === '已作废') {
+    return 'danger'
+  }
+
+  return ''
+}
+
+const formatDate = (date) => {
+  if (!date) {
+    return ''
+  }
+
+  return String(date).slice(0, 10)
+}
 </script>
 
 <style scoped>
 .tenant-page {
-  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-
-  margin-bottom: 20px;
 }
 
 .page-header h1 {
+  margin: 0 0 8px;
   font-size: 28px;
-  margin-bottom: 8px;
 }
 
 .page-header p {
-  color: #666;
+  margin: 0;
+  color: #606266;
 }
 
-.filter-card {
-  margin-bottom: 20px;
-  border-radius: 8px;
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.summary-card {
+  border-radius: 12px;
+}
+
+.summary-title {
+  color: #909399;
+  margin-bottom: 12px;
+}
+
+.summary-value {
+  font-size: 30px;
+  font-weight: bold;
+  color: #303133;
+  margin-bottom: 8px;
+}
+
+.summary-value.success {
+  color: #67c23a;
+}
+
+.summary-value.info {
+  color: #909399;
+}
+
+.summary-desc {
+  color: #909399;
+  font-size: 13px;
 }
 
 .table-card {
-  border-radius: 8px;
+  border-radius: 12px;
 }
 
-.form-layout {
+.card-header {
   display: flex;
-  gap: 24px;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
 }
 
-.form-column {
-  flex: 1;
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.muted-text {
+  color: #909399;
+  font-size: 13px;
+}
+
+.form-tip {
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  color: #909399;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+@media (max-width: 1000px) {
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card-header,
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>

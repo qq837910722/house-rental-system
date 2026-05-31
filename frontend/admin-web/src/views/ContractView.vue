@@ -31,10 +31,10 @@
             clearable
             style="width: 160px"
           >
-            <el-option label="未生效" value="未生效" />
-            <el-option label="已生效" value="已生效" />
+            <el-option label="待确认" value="待确认" />
+            <el-option label="生效中" value="生效中" />
             <el-option label="已到期" value="已到期" />
-            <el-option label="已终止" value="已终止" />
+            <el-option label="已作废" value="已作废" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -42,7 +42,7 @@
 
     <!-- 合同列表 -->
     <el-card class="table-card">
-      <el-table :data="filteredContractList" border style="width: 100%">
+      <el-table v-loading="tableLoading" :data="filteredContractList" border style="width: 100%">
         <el-table-column prop="contractNo" label="合同编号" width="160" />
 
         <el-table-column prop="tenantName" label="租客姓名" width="120" />
@@ -78,6 +78,14 @@
             <el-tag :type="getStatusType(scope.row.status)">
               {{ scope.row.status }}
             </el-tag>
+
+            <el-tag
+              v-if="scope.row.isExpiringSoon"
+              class="expire-tag"
+              type="warning"
+            >
+              30天内到期
+            </el-tag>
           </template>
         </el-table-column>
 
@@ -111,11 +119,7 @@
               导出
             </el-button>
 
-            <el-button
-              size="small"
-              type="danger"
-              @click="deleteContract(scope.row.id)"
-            >
+            <el-button size="small" type="danger" @click="deleteContract(scope.row)">
               删除
             </el-button>
           </template>
@@ -145,7 +149,7 @@
                 <el-option
                   v-for="tenant in tenantList"
                   :key="tenant.id"
-                  :label="`${tenant.name} - ${tenant.roomNumber}`"
+                  :label="`${tenant.name} - ${tenant.roomNumber || '未绑定房间'}`"
                   :value="tenant.id"
                 />
               </el-select>
@@ -222,10 +226,10 @@
                 placeholder="请选择合同状态"
                 style="width: 100%"
               >
-                <el-option label="未生效" value="未生效" />
-                <el-option label="已生效" value="已生效" />
+                <el-option label="待确认" value="待确认" />
+                <el-option label="生效中" value="生效中" />
                 <el-option label="已到期" value="已到期" />
-                <el-option label="已终止" value="已终止" />
+                <el-option label="已作废" value="已作废" />
               </el-select>
             </el-form-item>
           </div>
@@ -274,7 +278,7 @@
           取消
         </el-button>
 
-        <el-button type="primary" @click="submitForm">
+        <el-button type="primary" :loading="submitLoading" @click="submitForm">
           确认
         </el-button>
       </template>
@@ -283,78 +287,20 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import request from '../utils/request'
 
-// 租客数据：后面从租客管理 / 后端接口获取
-const tenantList = ref([
-  {
-    id: 1,
-    name: '张三',
-    phone: '13800000001',
-    buildingId: 'building-1',
-    buildingName: '紫霞公寓1号楼',
-    roomNumber: '101',
-    leaseStart: '2026-04-01',
-    leaseEnd: '2027-03-31',
-    rent: 6500,
-    deposit: 6500,
-  },
-  {
-    id: 2,
-    name: '王五',
-    phone: '13800000002',
-    buildingId: 'building-2',
-    buildingName: '紫霞公寓2号楼',
-    roomNumber: '201',
-    leaseStart: '2026-05-01',
-    leaseEnd: '2027-04-30',
-    rent: 8500,
-    deposit: 8500,
-  },
-])
-
-// 合同列表：前端假数据
-const contractList = ref([
-  {
-    id: 1,
-    contractNo: 'HT20260401001',
-    tenantId: 1,
-    tenantName: '张三',
-    phone: '13800000001',
-    buildingName: '紫霞公寓1号楼',
-    roomNumber: '101',
-    leaseStart: '2026-04-01',
-    leaseEnd: '2027-03-31',
-    rent: 6500,
-    deposit: 6500,
-    signMethod: '线下签约后上传',
-    status: '已生效',
-    contractFiles: [],
-  },
-  {
-    id: 2,
-    contractNo: 'HT20260501001',
-    tenantId: 2,
-    tenantName: '王五',
-    phone: '13800000002',
-    buildingName: '紫霞公寓2号楼',
-    roomNumber: '201',
-    leaseStart: '2026-05-01',
-    leaseEnd: '2027-04-30',
-    rent: 8500,
-    deposit: 8500,
-    signMethod: '在线签约',
-    status: '未生效',
-    contractFiles: [],
-  },
-])
+const tenantList = ref([])
+const contractList = ref([])
 
 const searchKeyword = ref('')
 const statusFilter = ref('')
 
 const dialogVisible = ref(false)
 const isEdit = ref(false)
+const tableLoading = ref(false)
+const submitLoading = ref(false)
 
 const form = reactive({
   id: null,
@@ -378,9 +324,9 @@ const filteredContractList = computed(() => {
   return contractList.value.filter((contract) => {
     const keywordMatch =
       !searchKeyword.value ||
-      contract.tenantName.includes(searchKeyword.value) ||
-      contract.roomNumber.includes(searchKeyword.value) ||
-      contract.contractNo.includes(searchKeyword.value)
+      String(contract.tenantName || '').includes(searchKeyword.value) ||
+      String(contract.roomNumber || '').includes(searchKeyword.value) ||
+      String(contract.contractNo || '').includes(searchKeyword.value)
 
     const statusMatch =
       !statusFilter.value ||
@@ -388,6 +334,83 @@ const filteredContractList = computed(() => {
 
     return keywordMatch && statusMatch
   })
+})
+
+const mapTenant = (tenant) => {
+  return {
+    id: tenant.id,
+    name: tenant.name,
+    phone: tenant.phone,
+    buildingId: tenant.building_id,
+    buildingName: tenant.building_name,
+    roomNumber: tenant.room_number,
+    leaseStart: formatDate(tenant.lease_start),
+    leaseEnd: formatDate(tenant.lease_end),
+    rent: Number(tenant.monthly_rent || tenant.rent || 0),
+    deposit: Number(tenant.deposit || 0),
+    status: tenant.status,
+  }
+}
+
+const mapContract = (contract) => {
+  const files = contract.pdf_url
+    ? [
+        {
+          name: '合同文件',
+          url: contract.pdf_url,
+        },
+      ]
+    : []
+
+  return {
+    id: contract.id,
+    contractNo: contract.contract_no,
+    tenantId: contract.tenant_id,
+    tenantName: contract.tenant_name || '',
+    phone: contract.tenant_phone || '',
+    buildingName: contract.building_name || '',
+    roomNumber: contract.room_number || '',
+    leaseStart: formatDate(contract.start_date),
+    leaseEnd: formatDate(contract.end_date),
+    rent: Number(contract.monthly_rent || contract.rent || 0),
+    deposit: Number(contract.deposit || 0),
+    signDate: formatDate(contract.sign_date),
+    signMethod: contract.pdf_url ? '线下签约后上传' : '在线签约',
+    status: contract.status,
+    isExpiringSoon: Boolean(contract.is_expiring_soon),
+    contractFiles: files,
+  }
+}
+
+const getTenantList = async () => {
+  const res = await request.get('/tenants')
+
+  if (res.code === 200) {
+    tenantList.value = (res.data || [])
+      .filter((tenant) => tenant.status === '在租' && tenant.room_number)
+      .map(mapTenant)
+  }
+}
+
+const getContractList = async () => {
+  tableLoading.value = true
+
+  try {
+    const res = await request.get('/contracts')
+
+    if (res.code === 200) {
+      contractList.value = (res.data || []).map(mapContract)
+    }
+  } catch (error) {
+    console.error('获取合同列表失败：', error)
+    ElMessage.error('获取合同列表失败，请确认后端是否正常')
+  } finally {
+    tableLoading.value = false
+  }
+}
+
+onMounted(async () => {
+  await Promise.all([getTenantList(), getContractList()])
 })
 
 // 自动生成合同编号
@@ -415,7 +438,7 @@ const resetForm = () => {
   form.rent = ''
   form.deposit = ''
   form.signMethod = '线下签约后上传'
-  form.status = '未生效'
+  form.status = '待确认'
   form.contractFileList = []
 }
 
@@ -441,7 +464,7 @@ const openEditDialog = (row) => {
   form.leaseEnd = row.leaseEnd
   form.rent = row.rent
   form.deposit = row.deposit
-  form.signMethod = row.signMethod
+  form.signMethod = row.signMethod || '线下签约后上传'
   form.status = row.status
 
   form.contractFileList = (row.contractFiles || []).map((file, index) => {
@@ -496,7 +519,7 @@ const handleContractFilePreview = (file) => {
 }
 
 // 提交表单
-const submitForm = () => {
+const submitForm = async () => {
   if (
     !form.contractNo ||
     !form.tenantId ||
@@ -511,44 +534,48 @@ const submitForm = () => {
     return
   }
 
-  const contractFiles = form.contractFileList.map((file) => {
-    return {
-      name: file.name,
-      url: file.url,
-    }
-  })
+  const firstFile = form.contractFileList.find((file) => file.url)
 
   const contractData = {
-    id: isEdit.value ? form.id : Date.now(),
-    contractNo: form.contractNo,
-    tenantId: form.tenantId,
-    tenantName: form.tenantName,
-    phone: form.phone,
-    buildingName: form.buildingName,
-    roomNumber: form.roomNumber,
-    leaseStart: form.leaseStart,
-    leaseEnd: form.leaseEnd,
-    rent: form.rent,
-    deposit: form.deposit,
-    signMethod: form.signMethod,
+    contract_no: form.contractNo,
+    tenant_id: form.tenantId,
+    start_date: form.leaseStart,
+    end_date: form.leaseEnd,
+    monthly_rent: Number(form.rent || 0),
+    deposit: Number(form.deposit || 0),
+    sign_date: new Date().toISOString().slice(0, 10),
     status: form.status,
-    contractFiles,
+    pdf_url: firstFile?.url || '',
   }
 
-  if (isEdit.value) {
-    const index = contractList.value.findIndex((item) => item.id === form.id)
+  try {
+    submitLoading.value = true
 
-    if (index !== -1) {
-      contractList.value[index] = contractData
+    if (isEdit.value) {
+      const res = await request.put(`/contracts/${form.id}`, contractData)
+
+      if (res.code === 200) {
+        ElMessage.success('合同信息修改成功')
+      }
+    } else {
+      const res = await request.post('/contracts', contractData)
+
+      if (res.code === 200) {
+        ElMessage.success('新增合同成功')
+      }
     }
 
-    ElMessage.success('合同信息修改成功')
-  } else {
-    contractList.value.push(contractData)
-    ElMessage.success('新增合同成功')
-  }
+    dialogVisible.value = false
+    await getContractList()
+    await getTenantList()
+  } catch (error) {
+    console.error('保存合同失败：', error)
 
-  dialogVisible.value = false
+    const message = error.response?.data?.message || '保存合同失败'
+    ElMessage.error(message)
+  } finally {
+    submitLoading.value = false
+  }
 }
 
 // 模拟导出合同
@@ -571,28 +598,40 @@ const previewContract = (row) => {
 }
 
 // 删除合同
-const deleteContract = (id) => {
-  ElMessageBox.confirm('确定要删除这份合同吗？', '删除确认', {
+const deleteContract = async (row) => {
+  try {
+    await ElMessageBox.confirm(`确定要删除合同「${row.contractNo}」吗？`, '删除确认', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',
   })
-    .then(() => {
-      contractList.value = contractList.value.filter((item) => item.id !== id)
+
+    const res = await request.delete(`/contracts/${row.id}`)
+
+    if (res.code === 200) {
       ElMessage.success('删除成功')
-    })
-    .catch(() => {
+      await getContractList()
+    }
+  } catch (error) {
+    if (error === 'cancel') {
       ElMessage.info('已取消删除')
-    })
+      return
+    }
+
+    console.error('删除合同失败：', error)
+
+    const message = error.response?.data?.message || '删除合同失败'
+    ElMessage.error(message)
+  }
 }
 
 // 合同状态标签颜色
 const getStatusType = (status) => {
-  if (status === '已生效') {
+  if (status === '生效中') {
     return 'success'
   }
 
-  if (status === '未生效') {
+  if (status === '待确认') {
     return 'warning'
   }
 
@@ -600,11 +639,19 @@ const getStatusType = (status) => {
     return 'info'
   }
 
-  if (status === '已终止') {
+  if (status === '已作废') {
     return 'danger'
   }
 
   return ''
+}
+
+const formatDate = (date) => {
+  if (!date) {
+    return ''
+  }
+
+  return String(date).slice(0, 10)
 }
 </script>
 
@@ -641,6 +688,10 @@ const getStatusType = (status) => {
 
 .empty-text {
   color: #999;
+}
+
+.expire-tag {
+  margin-left: 6px;
 }
 
 .form-layout {

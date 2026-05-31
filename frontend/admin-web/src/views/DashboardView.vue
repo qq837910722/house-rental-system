@@ -44,6 +44,7 @@
       </template>
 
       <el-table
+        v-loading="loading"
         :data="pendingOrderList"
         border
         style="width: 100%"
@@ -323,86 +324,67 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import request from '../utils/request'
 
-const reminderList = [
+const loading = ref(false)
+const detailVisible = ref(false)
+const detailData = ref({})
+const pendingOrderList = ref([])
+const monthlyWorkOrderStats = ref([])
+const utilityRawStats = ref([])
+
+const houseStats = reactive({
+  total: 0,
+  rented: 0,
+  vacant: 0,
+  repair: 0,
+})
+
+const overview = reactive({
+  activeTenants: 0,
+  pendingContracts: 0,
+  expiringContracts: 0,
+  unpaidBills: 0,
+  unpaidAmount: 0,
+  pendingWorkOrders: 0,
+  processingWorkOrders: 0,
+})
+
+const reminderList = computed(() => [
   {
     id: 1,
-    title: '水电缴费提醒',
-    desc: '3 条水电账单尚未缴费，建议发送缴费通知。',
+    title: '工单处理提醒',
+    desc: `${overview.pendingWorkOrders} 条工单待受理，${overview.processingWorkOrders} 条工单处理中。`,
   },
   {
     id: 2,
-    title: '合同审批提醒',
-    desc: '1 份合同处于未生效状态，需要尽快处理。',
+    title: '水电缴费提醒',
+    desc: `${overview.unpaidBills} 条水电账单尚未缴费，待收金额 ¥${overview.unpaidAmount}。`,
   },
   {
     id: 3,
-    title: '空置房提醒',
-    desc: '2 个空置房间可以同步到游客前台展示。',
+    title: '合同到期提醒',
+    desc: `${overview.expiringContracts} 份合同将在 30 天内到期，${overview.pendingContracts} 份合同待确认。`,
   },
-]
-
-// 每月工单处理件数，按类型分类
-const monthlyWorkOrderStats = [
-  {
-    month: '1月',
-    contract: 2,
-    repair: 3,
-    checkout: 1,
-    other: 1,
-  },
-  {
-    month: '2月',
-    contract: 1,
-    repair: 4,
-    checkout: 1,
-    other: 2,
-  },
-  {
-    month: '3月',
-    contract: 3,
-    repair: 2,
-    checkout: 2,
-    other: 1,
-  },
-  {
-    month: '4月',
-    contract: 2,
-    repair: 5,
-    checkout: 1,
-    other: 2,
-  },
-  {
-    month: '5月',
-    contract: 4,
-    repair: 3,
-    checkout: 2,
-    other: 3,
-  },
-]
+])
 
 const getMonthlyTotal = (item) => {
   return item.contract + item.repair + item.checkout + item.other
 }
 
 const maxMonthlyTotal = computed(() => {
-  return Math.max(...monthlyWorkOrderStats.map((item) => getMonthlyTotal(item)))
+  if (monthlyWorkOrderStats.value.length === 0) return 1
+  return Math.max(1, ...monthlyWorkOrderStats.value.map((item) => getMonthlyTotal(item)))
 })
 
 const getMonthlySegmentWidth = (count) => {
   return `${(count / maxMonthlyTotal.value) * 100}%`
 }
 
-const houseStats = {
-  total: 12,
-  rented: 8,
-  vacant: 3,
-  repair: 1,
-}
-
 const rentalRate = computed(() => {
+  if (!houseStats.total) return 0
   return Math.round((houseStats.rented / houseStats.total) * 100)
 })
 
@@ -417,81 +399,101 @@ const houseDonutStyle = computed(() => {
   )`
 })
 
-const utilityStats = [
-  {
-    month: '1月',
-    water: 45,
-    electricity: 60,
-  },
-  {
-    month: '2月',
-    water: 52,
-    electricity: 72,
-  },
-  {
-    month: '3月',
-    water: 58,
-    electricity: 68,
-  },
-  {
-    month: '4月',
-    water: 63,
-    electricity: 75,
-  },
-  {
-    month: '5月',
-    water: 70,
-    electricity: 82,
-  },
-]
+const maxWater = computed(() => {
+  if (utilityRawStats.value.length === 0) return 1
+  return Math.max(1, ...utilityRawStats.value.map((item) => Number(item.water || 0)))
+})
 
-const detailVisible = ref(false)
-const detailData = ref({})
+const maxElectricity = computed(() => {
+  if (utilityRawStats.value.length === 0) return 1
+  return Math.max(1, ...utilityRawStats.value.map((item) => Number(item.electricity || 0)))
+})
 
-const pendingOrderList = ref([
-  {
-    id: 1,
-    type: '合同审批',
-    title: '王五 201 房间合同审批',
-    tenantName: '王五',
-    roomNumber: '201',
-    submitTime: '2026-05-18 10:30',
-    status: '待处理',
-    content: '王五已提交 201 房间租赁合同，请房东确认合同内容是否通过。',
-    rejectReason: '',
-  },
-  {
-    id: 2,
-    type: '维修申请',
-    title: '101 房间空调漏水',
-    tenantName: '张三',
-    roomNumber: '101',
-    submitTime: '2026-05-18 09:20',
-    status: '待处理',
-    content: '租客反馈空调使用时有漏水现象，需要安排维修人员上门检查。',
-    rejectReason: '',
-  },
-  {
-    id: 3,
-    type: '退租申请',
-    title: '101 房间退租申请',
-    tenantName: '张三',
-    roomNumber: '101',
-    submitTime: '2026-05-17 16:00',
-    status: '待处理',
-    content: '租客申请月底退租，需要检查房间并结算押金。',
-    rejectReason: '',
-  },
-])
+const utilityStats = computed(() => {
+  return utilityRawStats.value.map((item) => ({
+    month: `${String(item.month || '').slice(5)}月`,
+    water: Math.max(8, Math.round((Number(item.water || 0) / maxWater.value) * 90)),
+    electricity: Math.max(8, Math.round((Number(item.electricity || 0) / maxElectricity.value) * 90)),
+  }))
+})
+
+const formatDateTime = (date) => {
+  if (!date) return ''
+  return String(date).replace('T', ' ').slice(0, 16)
+}
+
+const mapPendingOrder = (order) => ({
+  id: order.id,
+  type: order.type,
+  title: order.title,
+  tenantName: order.tenant_name || '',
+  roomNumber: order.room_number || '',
+  submitTime: formatDateTime(order.created_at),
+  status: order.status,
+  content: order.content,
+  rejectReason: order.handle_result || '',
+})
+
+const mapMonthlyWorkOrder = (item) => ({
+  month: `${String(item.month || '').slice(5)}月`,
+  contract: Number(item.contract || 0),
+  repair: Number(item.repair || 0),
+  checkout: Number(item.checkout || 0),
+  other: Number(item.other || 0),
+})
+
+const getDashboardData = async () => {
+  loading.value = true
+  try {
+    const res = await request.get('/dashboard')
+    if (res.code !== 200) return
+
+    const data = res.data || {}
+    Object.assign(houseStats, {
+      total: Number(data.rooms?.total || 0),
+      rented: Number(data.rooms?.rented || 0),
+      vacant: Number(data.rooms?.vacant || 0),
+      repair: Number(data.rooms?.repair || 0),
+    })
+    Object.assign(overview, {
+      activeTenants: Number(data.tenants?.active || 0),
+      pendingContracts: Number(data.contracts?.pending || 0),
+      expiringContracts: Number(data.contracts?.expiring || 0),
+      unpaidBills: Number(data.bills?.unpaid || 0),
+      unpaidAmount: Number(data.bills?.unpaid_amount || 0),
+      pendingWorkOrders: Number(data.workOrders?.pending || 0),
+      processingWorkOrders: Number(data.workOrders?.processing || 0),
+    })
+    pendingOrderList.value = (data.pendingOrders || []).map(mapPendingOrder)
+    monthlyWorkOrderStats.value = (data.monthlyWorkOrders || []).map(mapMonthlyWorkOrder)
+    utilityRawStats.value = data.utilityStats || []
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '获取看板数据失败')
+  } finally {
+    loading.value = false
+  }
+}
 
 const openOrderDetail = (row) => {
   detailData.value = row
   detailVisible.value = true
 }
 
+const updateOrderStatus = async (row, status, handleResult) => {
+  const res = await request.put(`/work-orders/${row.id}/status`, {
+    status,
+    handler: '房东',
+    handle_result: handleResult,
+  })
+
+  if (res.code === 200) {
+    ElMessage.success(`${row.title} 已更新`)
+    await getDashboardData()
+  }
+}
+
 const approveOrder = (row) => {
-  row.status = '已通过'
-  ElMessage.success(`${row.title} 已通过`)
+  updateOrderStatus(row, '已通过', '审批通过。')
 }
 
 const rejectOrder = (row) => {
@@ -503,9 +505,7 @@ const rejectOrder = (row) => {
     inputErrorMessage: '请填写驳回理由',
   })
     .then(({ value }) => {
-      row.status = '已驳回'
-      row.rejectReason = value
-      ElMessage.warning(`${row.title} 已驳回`)
+      updateOrderStatus(row, '已驳回', `审批驳回：${value}`)
     })
     .catch(() => {
       ElMessage.info('已取消驳回')
@@ -513,13 +513,11 @@ const rejectOrder = (row) => {
 }
 
 const startOrder = (row) => {
-  row.status = '处理中'
-  ElMessage.success(`${row.title} 已受理`)
+  updateOrderStatus(row, '处理中', '工单已受理，正在安排处理。')
 }
 
 const finishOrder = (row) => {
-  row.status = '已完成'
-  ElMessage.success(`${row.title} 已完成`)
+  updateOrderStatus(row, '已完成', '工单已处理完成。')
 }
 
 const getOrderType = (type) => {
@@ -561,6 +559,8 @@ const getStatusType = (status) => {
 
   return ''
 }
+
+onMounted(getDashboardData)
 </script>
 
 <style scoped>
@@ -577,12 +577,19 @@ const getStatusType = (status) => {
   display: flex;
   align-items: center;
 
-  border-radius: 12px;
+  border: 3px solid #252523;
+  border-radius: 16px;
 
-  background: linear-gradient(135deg, #001529, #16456a);
-  color: #ffffff;
+  background:
+    linear-gradient(90deg, rgba(45, 36, 31, 0.9), rgba(89, 58, 36, 0.72)),
+    radial-gradient(circle at 90% 40%, rgba(255, 198, 26, 0.5), transparent 90px),
+    url('/images/zixia-building.png');
+  background-size: auto, auto, cover;
+  background-repeat: no-repeat;
+  background-position: center, center, center;
+  color: #fff8df;
 
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 24px rgba(47, 47, 45, 0.12);
 }
 
 .banner h1 {
@@ -592,14 +599,14 @@ const getStatusType = (status) => {
 
 .banner p {
   font-size: 14px;
-  color: #e6f4ff;
+  color: rgba(255, 248, 223, 0.92);
 }
 
 /* 今日提醒 */
 .reminder-card {
   margin-bottom: 20px;
   border-radius: 10px;
-  border-left: 5px solid #409eff;
+  border-left: 6px solid #ff7b5f;
 }
 
 .reminder-grid {
@@ -611,13 +618,14 @@ const getStatusType = (status) => {
 .reminder-item {
   padding: 14px 16px;
 
-  background: #f5f7fa;
+  background: #fff4d6;
+  border: 1px solid rgba(255, 198, 26, 0.45);
   border-radius: 8px;
 }
 
 .reminder-title {
   font-weight: bold;
-  color: #303133;
+  color: #252523;
   margin-bottom: 8px;
 }
 

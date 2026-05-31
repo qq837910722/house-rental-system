@@ -3,12 +3,12 @@
     <!-- 欢迎区域 -->
     <div class="welcome-card">
       <div>
-        <h1>欢迎回家，张三</h1>
+        <h1>欢迎回家，{{ dashboardTenant.name || tenantUser.name || '租客' }}</h1>
         <p>这里是您的租客服务中心，可以查看合同、水电账单、通知和工单进度。</p>
       </div>
 
       <div class="room-badge">
-        当前房间：101
+        当前房间：{{ dashboardTenant.room_number || tenantUser.room_number || '-' }}
       </div>
     </div>
 
@@ -20,11 +20,11 @@
         </div>
 
         <div class="summary-value money">
-          ¥7280
+          ¥{{ summary.totalDue }}
         </div>
 
         <div class="summary-desc">
-          房租 ¥6500 + 水电费 ¥780
+          房租 ¥{{ summary.monthlyRent }} + 水电费 ¥{{ summary.utilityAmount }}
         </div>
       </el-card>
 
@@ -55,7 +55,15 @@
         </div>
       </template>
 
-      <div class="notice-list">
+      <el-empty
+        v-if="noticeList.length === 0"
+        description="暂无最新通知"
+      />
+
+      <div
+        v-else
+        class="notice-list"
+      >
         <div
           v-for="notice in noticeList"
           :key="notice.id"
@@ -88,8 +96,8 @@
         <div class="card-header">
           <span>水电账单</span>
 
-          <el-tag type="warning">
-            本月待缴费
+          <el-tag :type="getUtilityStatusType(latestBill.status)">
+            {{ latestBill.status || '暂无账单' }}
           </el-tag>
         </div>
       </template>
@@ -101,35 +109,35 @@
 
           <el-descriptions border :column="2">
             <el-descriptions-item label="账单月份">
-              2026年5月
+              {{ latestBill.billMonth || '暂无' }}
             </el-descriptions-item>
 
             <el-descriptions-item label="账单状态">
-              待缴费
+              {{ latestBill.status || '暂无账单' }}
             </el-descriptions-item>
 
             <el-descriptions-item label="用水量">
-              12 吨
+              {{ latestBill.waterUsage || 0 }} 吨
             </el-descriptions-item>
 
             <el-descriptions-item label="水费">
-              ¥60
+              ¥{{ latestBill.waterFee || 0 }}
             </el-descriptions-item>
 
             <el-descriptions-item label="用电量">
-              360 度
+              {{ latestBill.electricityUsage || 0 }} 度
             </el-descriptions-item>
 
             <el-descriptions-item label="电费">
-              ¥720
+              ¥{{ latestBill.electricityFee || 0 }}
             </el-descriptions-item>
 
             <el-descriptions-item label="合计金额">
-              <strong class="total-money">¥780</strong>
+              <strong class="total-money">¥{{ latestBill.totalAmount || 0 }}</strong>
             </el-descriptions-item>
 
             <el-descriptions-item label="缴费期限">
-              2026-05-31
+              {{ latestBill.dueDate || '暂无' }}
             </el-descriptions-item>
           </el-descriptions>
         </div>
@@ -235,6 +243,96 @@
 </template>
 
 <script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import request from '../utils/request'
+
+const router = useRouter()
+const noticeList = ref([])
+const workOrderList = ref([])
+const dashboardTenant = ref({})
+const summary = ref({
+  monthlyRent: 0,
+  utilityAmount: 0,
+  totalDue: 0,
+})
+const latestBill = ref({})
+const utilityRawStats = ref([])
+
+const tenantUser = computed(() => {
+  try {
+    return JSON.parse(localStorage.getItem('tenant_user') || '{}')
+  } catch {
+    return {}
+  }
+})
+
+const tenantId = computed(() => tenantUser.value.tenant_id || tenantUser.value.id)
+
+const formatDate = (date) => {
+  if (!date) return ''
+  return String(date).slice(5, 10)
+}
+
+const mapNotice = (notice) => ({
+  id: notice.id,
+  title: notice.title,
+  content: notice.content,
+  time: formatDate(notice.publish_time),
+  needConfirm: Number(notice.need_confirm) === 1 && Number(notice.is_confirmed) !== 1,
+})
+
+const getNoticeList = async () => {
+  if (!tenantId.value) return
+
+  const res = await request.get('/tenant/notices', {
+    params: { tenant_id: tenantId.value },
+  })
+
+  if (res.code === 200) {
+    noticeList.value = (res.data || []).slice(0, 3).map(mapNotice)
+  }
+}
+
+const formatDateTime = (date) => {
+  if (!date) return ''
+  return String(date).replace('T', ' ').slice(0, 16)
+}
+
+const getWorkOrderStatusType = (status) => {
+  if (status === '待处理') return 'warning'
+  if (status === '处理中') return 'primary'
+  if (status === '已完成') return 'success'
+  if (status === '已驳回') return 'danger'
+  return 'info'
+}
+
+const mapWorkOrder = (order) => ({
+  id: order.id,
+  title: order.title,
+  roomNumber: order.room_number || tenantUser.value.room_number || '',
+  submitTime: formatDateTime(order.created_at),
+  status: order.status === '待处理' ? '待受理' : order.status,
+  statusType: getWorkOrderStatusType(order.status),
+  description: order.content,
+  steps: [
+    {
+      id: `${order.id}-submit`,
+      content: `提交${order.type}`,
+      time: formatDateTime(order.created_at),
+      type: 'primary',
+    },
+    ...(order.handle_result
+      ? [{
+          id: `${order.id}-handle`,
+          content: order.handle_result,
+          time: formatDateTime(order.handle_time),
+          type: getWorkOrderStatusType(order.status),
+        }]
+      : []),
+  ],
+})
+
 const goNoticePage = () => {
   router.push('/my-notices')
 }
@@ -242,173 +340,81 @@ const goNoticePage = () => {
 const goWorkOrderPage = () => {
   router.push('/my-work-orders')
 }
-import { computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
 
-const router = useRouter()
+const formatMonth = (month) => {
+  if (!month) return ''
+  return `${String(month).slice(5)}月`
+}
 
-const noticeList = [
-  {
-    id: 1,
-    title: '5月水电账单通知',
-    content: '本月水电账单已生成，请及时确认。',
-    time: '05-18',
-    needConfirm: true,
-  },
-  {
-    id: 2,
-    title: '公共区域清扫通知',
-    content: '本周六上午将进行公共区域清扫。',
-    time: '05-17',
-    needConfirm: false,
-  },
-  {
-    id: 3,
-    title: '活动室使用提醒',
-    content: '活动室使用后请保持卫生，关闭空调。',
-    time: '05-16',
-    needConfirm: true,
-  },
-]
+const mapLatestBill = (bill) => {
+  if (!bill) return {}
 
-// 需要租客确认的通知
-const confirmNoticeList = noticeList.filter((item) => item.needConfirm)
-
-// 进入租客首页后，依次弹出需要确认的通知
-const showConfirmNotices = async () => {
-  for (const notice of confirmNoticeList) {
-    await ElMessageBox.alert(notice.content, notice.title, {
-      confirmButtonText: '我已确认',
-      type: 'warning',
-      closeOnClickModal: false,
-      closeOnPressEscape: false,
-    })
-  }
-
-  if (confirmNoticeList.length > 0) {
-    ElMessage.success('所有需要确认的通知已确认')
+  return {
+    billMonth: bill.bill_month,
+    status: bill.status,
+    waterUsage: Number(bill.water_usage || 0),
+    waterFee: Number(bill.water_fee || 0),
+    electricityUsage: Number(bill.electricity_usage || 0),
+    electricityFee: Number(bill.electricity_fee || 0),
+    totalAmount: Number(bill.total_amount || 0),
+    dueDate: bill.due_date ? String(bill.due_date).slice(0, 10) : '',
   }
 }
 
-onMounted(() => {
-  showConfirmNotices()
+const maxWaterUsage = computed(() => {
+  if (utilityRawStats.value.length === 0) return 1
+  return Math.max(1, ...utilityRawStats.value.map((item) => Number(item.water_usage || 0)))
 })
 
-const utilityStats = [
-  {
-    month: '1月',
-    waterHeight: 45,
-    electricityHeight: 55,
-  },
-  {
-    month: '2月',
-    waterHeight: 50,
-    electricityHeight: 62,
-  },
-  {
-    month: '3月',
-    waterHeight: 58,
-    electricityHeight: 70,
-  },
-  {
-    month: '4月',
-    waterHeight: 65,
-    electricityHeight: 76,
-  },
-  {
-    month: '5月',
-    waterHeight: 70,
-    electricityHeight: 88,
-  },
-]
+const maxElectricityUsage = computed(() => {
+  if (utilityRawStats.value.length === 0) return 1
+  return Math.max(1, ...utilityRawStats.value.map((item) => Number(item.electricity_usage || 0)))
+})
 
-const workOrderList = [
-  {
-    id: 1,
-    title: '维修申请',
-    roomNumber: '101',
-    submitTime: '2026-05-18 09:20',
-    status: '处理中',
-    statusType: 'warning',
-    description: '101房间空调漏水，需要维修人员上门检查。',
-    steps: [
-      {
-        id: 1,
-        content: '提交维修申请：101房间空调漏水',
-        time: '2026-05-18 09:20',
-        type: 'primary',
-      },
-      {
-        id: 2,
-        content: '房东已受理，等待维修人员上门',
-        time: '2026-05-18 10:10',
-        type: 'success',
-      },
-    ],
-  },
-  {
-    id: 2,
-    title: '开门申请',
-    roomNumber: '101',
-    submitTime: '2026-05-16 20:30',
-    status: '已完成',
-    statusType: 'success',
-    description: '忘带钥匙，需要协助开门。',
-    steps: [
-      {
-        id: 1,
-        content: '提交开门申请：忘带钥匙，需要协助开门',
-        time: '2026-05-16 20:30',
-        type: 'warning',
-      },
-      {
-        id: 2,
-        content: '开门申请已处理完成',
-        time: '2026-05-16 20:50',
-        type: 'success',
-      },
-    ],
-  },
-  {
-    id: 3,
-    title: '退租咨询',
-    roomNumber: '101',
-    submitTime: '2026-05-10 14:20',
-    status: '待回复',
-    statusType: 'info',
-    description: '咨询退租流程和押金结算方式。',
-    steps: [
-      {
-        id: 1,
-        content: '提交退租咨询：咨询退租流程和押金结算方式',
-        time: '2026-05-10 14:20',
-        type: 'info',
-      },
-    ],
-  },
-  {
-    id: 4,
-    title: '维修申请',
-    roomNumber: '101',
-    submitTime: '2026-05-20 18:40',
-    status: '待受理',
-    statusType: 'danger',
-    description: '101房间浴室排水较慢，希望安排检查。',
-    steps: [
-      {
-        id: 1,
-        content: '提交维修申请：浴室排水较慢',
-        time: '2026-05-20 18:40',
-        type: 'danger',
-      },
-    ],
-  },
-]
+const utilityStats = computed(() => {
+  return utilityRawStats.value.map((item) => ({
+    month: formatMonth(item.month),
+    waterHeight: Math.max(8, Math.round((Number(item.water_usage || 0) / maxWaterUsage.value) * 90)),
+    electricityHeight: Math.max(
+      8,
+      Math.round((Number(item.electricity_usage || 0) / maxElectricityUsage.value) * 90),
+    ),
+  }))
+})
+
+const getUtilityStatusType = (status) => {
+  if (status === '已缴费') return 'success'
+  if (status === '已逾期') return 'danger'
+  return 'warning'
+}
+
+const getDashboardData = async () => {
+  if (!tenantId.value) return
+
+  const res = await request.get('/tenant/dashboard', {
+    params: { tenant_id: tenantId.value },
+  })
+
+  if (res.code === 200) {
+    const data = res.data || {}
+    dashboardTenant.value = data.tenant || {}
+    summary.value = {
+      monthlyRent: Number(data.summary?.monthlyRent || 0),
+      utilityAmount: Number(data.summary?.utilityAmount || 0),
+      totalDue: Number(data.summary?.totalDue || 0),
+    }
+    latestBill.value = mapLatestBill(data.latestBill)
+    utilityRawStats.value = data.utilityStats || []
+    noticeList.value = (data.notices || []).map(mapNotice)
+    workOrderList.value = (data.workOrders || []).map(mapWorkOrder)
+  }
+}
+
+onMounted(getDashboardData)
 
 // 首页只显示未完成工单，并按发起时间逆序排列
 const incompleteWorkOrderList = computed(() => {
-  return workOrderList
+  return workOrderList.value
     .filter((order) => order.status !== '已完成')
     .sort((a, b) => {
       return b.submitTime.localeCompare(a.submitTime)
@@ -731,6 +737,109 @@ const incompleteWorkOrderList = computed(() => {
     flex-direction: column;
     align-items: flex-start;
     gap: 18px;
+  }
+}
+
+@media (max-width: 700px) {
+  .home-page {
+    gap: 14px;
+  }
+
+  .welcome-card {
+    padding: 20px;
+    border-radius: 12px;
+    gap: 14px;
+  }
+
+  .welcome-card h1 {
+    font-size: 24px;
+    line-height: 1.25;
+  }
+
+  .welcome-card p {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .room-badge {
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: 12px;
+    text-align: center;
+  }
+
+  .content-card :deep(.el-card__body) {
+    padding: 14px;
+  }
+
+  .card-header {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .summary-value {
+    font-size: 24px;
+  }
+
+  .notice-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .notice-item h4 {
+    flex-wrap: wrap;
+  }
+
+  .utility-section {
+    gap: 16px;
+  }
+
+  .current-utility h3,
+  .utility-chart-card h3 {
+    font-size: 16px;
+  }
+
+  .current-utility :deep(.el-descriptions__table) {
+    display: block;
+  }
+
+  .current-utility :deep(.el-descriptions__tbody) {
+    display: block;
+  }
+
+  .current-utility :deep(.el-descriptions__row) {
+    display: block;
+  }
+
+  .current-utility :deep(.el-descriptions__cell) {
+    display: block;
+    width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  .utility-chart-card {
+    padding-left: 0;
+  }
+
+  .utility-chart {
+    height: 220px;
+    padding: 16px 8px 0;
+    overflow-x: auto;
+    justify-content: flex-start;
+    gap: 18px;
+  }
+
+  .bar-area {
+    height: 160px;
+  }
+
+  .work-order-card {
+    padding: 14px;
+  }
+
+  .work-order-header {
+    flex-direction: column;
   }
 }
 </style>

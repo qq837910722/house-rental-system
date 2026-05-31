@@ -14,6 +14,7 @@ import HouseView from '../views/HouseView.vue'
 const routes = [
   {
     path: '/',
+    name: 'login',
     component: LoginView,
   },
   {
@@ -55,6 +56,20 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+})
+
+router.beforeEach((to) => {
+  const adminUser = localStorage.getItem('admin_user')
+
+  if (to.name !== 'login' && !adminUser) {
+    return '/'
+  }
+
+  if (to.name === 'login' && adminUser) {
+    return '/dashboard'
+  }
+
+  return true
 })
 
 export default router

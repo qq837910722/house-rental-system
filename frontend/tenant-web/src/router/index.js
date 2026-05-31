@@ -54,4 +54,18 @@ const router = createRouter({
   ],
 })
 
+router.beforeEach((to) => {
+  const tenantUser = localStorage.getItem('tenant_user')
+
+  if (to.name !== 'login' && !tenantUser) {
+    return '/login'
+  }
+
+  if (to.name === 'login' && tenantUser) {
+    return '/home'
+  }
+
+  return true
+})
+
 export default router

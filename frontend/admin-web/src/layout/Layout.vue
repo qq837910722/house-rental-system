@@ -3,15 +3,19 @@
     <!-- 左侧菜单 -->
     <el-aside width="220px" class="sidebar">
       <div class="logo">
-        紫霞公寓
+        <img src="/images/zixia-brand.jpg" alt="紫霞公寓" />
+        <div>
+          <strong>紫霞公寓</strong>
+          <span>租好房</span>
+        </div>
       </div>
 
       <el-menu
         router
         :default-active="activeMenu"
-        background-color="#001529"
-        text-color="#ffffff"
-        active-text-color="#409eff"
+        background-color="transparent"
+        text-color="#fff8df"
+        active-text-color="#222222"
         class="side-menu"
       >
         <el-menu-item index="/dashboard">
@@ -49,7 +53,7 @@
       <!-- 顶部导航 -->
       <el-header class="header">
         <div class="header-title">
-          房屋管理系统后台
+          紫霞公寓 · 房屋管理系统后台
         </div>
 
         <div class="header-right">
@@ -121,11 +125,11 @@
           >
             <div class="user-menu">
               <div class="admin-avatar">
-                管
+                {{ adminInitial }}
               </div>
 
               <span class="admin-name">
-                管理员
+                {{ adminUser.name || adminUser.username || 'admin' }}
               </span>
 
               <span class="arrow">
@@ -166,10 +170,23 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
+
+const adminUser = computed(() => {
+  try {
+    return JSON.parse(localStorage.getItem('admin_user') || '{}')
+  } catch {
+    return {}
+  }
+})
+
+const adminInitial = computed(() => {
+  return (adminUser.value.name || adminUser.value.username || 'A').slice(0, 1)
+})
 
 // 当前激活菜单
 const activeMenu = computed(() => {
@@ -236,10 +253,9 @@ const handleUserCommand = (command) => {
       type: 'warning',
     })
       .then(() => {
+        localStorage.removeItem('admin_user')
         ElMessage.success('已退出登录')
-
-        // 后面接真实登录功能后，可以跳转到登录页
-        // window.location.href = '/'
+        router.replace('/')
       })
       .catch(() => {
         ElMessage.info('已取消退出')
@@ -251,28 +267,55 @@ const handleUserCommand = (command) => {
 <style scoped>
 .layout-container {
   height: 100vh;
+  background: #fff8ec;
 }
 
 /* 左侧菜单 */
 .sidebar {
-  background: #001529;
-  color: #ffffff;
+  background:
+    linear-gradient(180deg, rgba(45, 36, 31, 0.98), rgba(29, 24, 21, 0.99)),
+    radial-gradient(circle at 42px 120px, rgba(255, 198, 24, 0.24), transparent 120px);
+  color: #fff8df;
+  border-right: 4px solid #ff7b5f;
 }
 
 .logo {
-  height: 64px;
+  min-height: 104px;
+  padding: 16px 18px;
 
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 12px;
 
-  font-size: 22px;
-  font-weight: bold;
+  color: #fff8df;
+  background: rgba(20, 16, 14, 0.42);
 
-  color: #ffffff;
-  background: #001529;
+  border-bottom: 2px solid rgba(255, 199, 31, 0.55);
+}
 
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+.logo img {
+  width: 54px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 2px solid #ffc61a;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+.logo strong {
+  display: block;
+  font-size: 21px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.logo span {
+  display: block;
+  margin-top: 2px;
+  color: #ffc61a;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 6px;
 }
 
 .side-menu {
@@ -282,15 +325,26 @@ const handleUserCommand = (command) => {
 .side-menu :deep(.el-menu-item) {
   height: 58px;
   font-size: 15px;
+  margin: 7px 12px;
+  border-radius: 14px;
+  color: #fff8df;
+  font-weight: 700;
+}
+
+.side-menu :deep(.el-menu-item:hover) {
+  background: rgba(255, 198, 24, 0.18);
+  color: #ffc61a;
 }
 
 .side-menu :deep(.el-menu-item.is-active) {
-  background: #001f33;
+  background: #ffc61a;
+  color: #222222;
+  box-shadow: 0 8px 18px rgba(255, 123, 95, 0.26);
 }
 
 /* 顶部栏 */
 .header {
-  height: 64px;
+  height: 72px;
 
   display: flex;
   align-items: center;
@@ -298,15 +352,31 @@ const handleUserCommand = (command) => {
 
   padding: 0 28px;
 
-  background: #ffffff;
+  background:
+    linear-gradient(90deg, rgba(255, 248, 236, 0.96), rgba(255, 243, 218, 0.96)),
+    radial-gradient(circle at 88% 0%, rgba(255, 198, 24, 0.22), transparent 160px);
 
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 3px solid #ffc61a;
 }
 
 .header-title {
-  font-size: 18px;
-  font-weight: bold;
-  color: #303133;
+  position: relative;
+  font-size: 20px;
+  font-weight: 900;
+  color: #242424;
+  letter-spacing: 0.5px;
+}
+
+.header-title::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 10px;
+  border-radius: 4px 12px 4px 12px;
+  background: #ff7b5f;
+  box-shadow: 14px 0 0 #ffc61a, 28px 0 0 #8c5a2b;
+  vertical-align: -1px;
 }
 
 .header-right {
@@ -328,7 +398,8 @@ const handleUserCommand = (command) => {
   border: none;
   border-radius: 50%;
 
-  background: #f5f7fa;
+  background: #fff4d6;
+  border: 2px solid #ffc61a;
 
   cursor: pointer;
 
@@ -340,7 +411,7 @@ const handleUserCommand = (command) => {
 }
 
 .bell-button:hover {
-  background: #ecf5ff;
+  background: #ffe29a;
 }
 
 .notice-popover-header {
@@ -418,7 +489,7 @@ const handleUserCommand = (command) => {
 }
 
 .user-menu:hover {
-  background: #f5f7fa;
+  background: #fff0cc;
 }
 
 .admin-avatar {
@@ -427,7 +498,7 @@ const handleUserCommand = (command) => {
 
   border-radius: 50%;
 
-  background: #409eff;
+  background: #ff7b5f;
   color: #ffffff;
 
   display: flex;
@@ -439,7 +510,7 @@ const handleUserCommand = (command) => {
 }
 
 .admin-name {
-  color: #606266;
+  color: #242424;
   font-size: 14px;
 }
 
@@ -450,11 +521,14 @@ const handleUserCommand = (command) => {
 
 /* 主体内容 */
 .main-content {
-  background: #f0f2f5;
+  background:
+    radial-gradient(circle at 94% 34px, rgba(255, 198, 24, 0.22) 0 42px, transparent 43px),
+    radial-gradient(circle at 28px 92%, rgba(255, 123, 95, 0.14) 0 72px, transparent 73px),
+    linear-gradient(180deg, #fff8ec 0%, #fff3da 100%);
 
   padding: 24px;
 
-  height: calc(100vh - 64px);
+  height: calc(100vh - 72px);
   overflow-y: auto;
 }
 </style>

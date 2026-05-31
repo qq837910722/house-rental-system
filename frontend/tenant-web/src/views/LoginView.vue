@@ -80,6 +80,7 @@
           type="primary"
           size="large"
           class="login-button"
+          :loading="loginLoading"
           @click="handleLogin"
         >
           登录
@@ -93,11 +94,45 @@
       </el-form>
 
       <div class="test-account">
-        <p>测试账号：</p>
-        <p>手机号：13800000001</p>
-        <p>密码：123456</p>
+        <p>登录说明：</p>
+        <p>账号为租客手机号</p>
+        <p>初始密码：123456</p>
       </div>
     </div>
+
+    <el-dialog
+      v-model="passwordDialogVisible"
+      title="首次登录请修改密码"
+      width="420px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="false"
+    >
+      <el-form>
+        <el-form-item label="新密码">
+          <el-input
+            v-model="newPassword"
+            type="password"
+            show-password
+            placeholder="请输入新密码，至少6位"
+          />
+        </el-form-item>
+        <el-form-item label="确认密码">
+          <el-input
+            v-model="confirmPassword"
+            type="password"
+            show-password
+            placeholder="请再次输入新密码"
+          />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button type="primary" :loading="changePasswordLoading" @click="handleForceChangePassword">
+          确认修改
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 底部版权 -->
     <div class="footer">
@@ -107,11 +142,18 @@
 </template>
 
 <script setup>
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import request from '../utils/request'
 
 const router = useRouter()
+const loginLoading = ref(false)
+const passwordDialogVisible = ref(false)
+const changePasswordLoading = ref(false)
+const newPassword = ref('')
+const confirmPassword = ref('')
+const pendingUser = ref(null)
 
 const loginForm = reactive({
   phone: '',
@@ -119,7 +161,7 @@ const loginForm = reactive({
   remember: true,
 })
 
-const handleLogin = () => {
+const handleLogin = async () => {
   if (!loginForm.phone) {
     ElMessage.warning('请输入手机号')
     return
@@ -130,17 +172,72 @@ const handleLogin = () => {
     return
   }
 
-  if (loginForm.phone === '13800000001' && loginForm.password === '123456') {
-  ElMessage.success('登录成功')
-  router.push('/home')
-  return
+  try {
+    loginLoading.value = true
+
+    const res = await request.post('/tenant/login', {
+      phone: loginForm.phone,
+      password: loginForm.password,
+    })
+
+    if (res.code === 200) {
+      if (res.data.must_change_password) {
+        pendingUser.value = res.data
+        passwordDialogVisible.value = true
+        ElMessage.warning('首次登录需要先修改初始密码')
+        return
+      }
+
+      localStorage.setItem('tenant_user', JSON.stringify(res.data))
+      ElMessage.success('登录成功')
+      router.push('/home')
+    }
+  } catch (error) {
+    const message = error.response?.data?.message || '手机号或密码错误'
+    ElMessage.error(message)
+  } finally {
+    loginLoading.value = false
+  }
 }
 
-  ElMessage.error('手机号或密码错误')
+const handleForceChangePassword = async () => {
+  if (!newPassword.value || newPassword.value.length < 6) {
+    ElMessage.warning('新密码至少 6 位')
+    return
+  }
+
+  if (newPassword.value !== confirmPassword.value) {
+    ElMessage.warning('两次输入的新密码不一致')
+    return
+  }
+
+  try {
+    changePasswordLoading.value = true
+
+    const res = await request.post('/users/change-password', {
+      user_id: pendingUser.value.user_id,
+      old_password: loginForm.password,
+      new_password: newPassword.value,
+      role: 'tenant',
+    })
+
+    if (res.code === 200) {
+      ElMessage.success('密码已修改，请使用新密码重新登录')
+      passwordDialogVisible.value = false
+      loginForm.password = ''
+      newPassword.value = ''
+      confirmPassword.value = ''
+      pendingUser.value = null
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '修改密码失败')
+  } finally {
+    changePasswordLoading.value = false
+  }
 }
 
 const goVisitor = () => {
-  window.location.href = 'http://localhost:5175/'
+  window.location.href = 'https://fqzxgy.com/'
 }
 </script>
 

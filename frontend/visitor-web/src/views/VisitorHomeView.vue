@@ -3,7 +3,8 @@
     <!-- 顶部导航 -->
     <header class="header">
       <div class="logo">
-        紫霞公寓
+        <img src="/favicon.svg" alt="紫霞公寓" />
+        <span>紫霞公寓</span>
       </div>
 
       <nav class="nav">
@@ -21,6 +22,21 @@
 
     <!-- banner -->
     <section class="banner">
+      <el-carousel
+        class="banner-carousel"
+        height="420px"
+        arrow="never"
+        indicator-position="outside"
+        :interval="4200"
+      >
+        <el-carousel-item
+          v-for="image in bannerImages"
+          :key="image"
+        >
+          <img :src="image" alt="紫霞公寓环境展示" />
+        </el-carousel-item>
+      </el-carousel>
+
       <div class="banner-mask"></div>
 
       <div class="banner-content">
@@ -116,15 +132,30 @@
           :key="facility.id"
           class="facility-card"
         >
-          <div class="facility-image">
-            <img
-              v-if="facility.image"
-              :src="facility.image"
-              :alt="facility.title"
-            />
+          <div class="facility-gallery">
+            <div class="facility-image">
+              <img
+                v-if="facility.images?.length"
+                :src="facility.images[0]"
+                :alt="facility.title"
+              />
 
-            <div v-else class="facility-icon">
-              {{ facility.icon }}
+              <div v-else class="facility-icon">
+                {{ facility.icon }}
+              </div>
+            </div>
+
+            <div v-if="facility.images?.length > 1" class="facility-thumbs">
+              <img
+                v-for="(image, index) in facility.images.slice(1)"
+                :key="image"
+                :src="image"
+                :alt="`${facility.title}展示图${index + 2}`"
+              />
+            </div>
+
+            <div v-if="facility.images?.length" class="facility-count">
+              {{ facility.images.length }} 张图
             </div>
           </div>
 
@@ -144,7 +175,7 @@
       </div>
 
       <!-- 楼栋切换 -->
-      <div class="building-tabs">
+      <div v-loading="roomLoading" class="building-tabs">
         <div
           v-for="building in buildingList"
           :key="building.id"
@@ -158,7 +189,7 @@
       </div>
 
       <!-- 房间卡片 -->
-      <div class="room-grid">
+      <div v-if="currentRoomList.length > 0" class="room-grid">
         <el-card
           v-for="room in currentRoomList"
           :key="room.id"
@@ -225,6 +256,12 @@
           </div>
         </el-card>
       </div>
+
+      <el-empty
+        v-else
+        class="room-empty"
+        description="当前楼栋暂无可出租房间"
+      />
     </section>
 
     <!-- 常见问题 FAQ -->
@@ -395,20 +432,29 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import request from '../utils/request'
 
-const currentBuildingId = ref('building-1')
+const currentBuildingId = ref(null)
+const roomLoading = ref(false)
 
-const buildingList = [
-  {
-    id: 'building-1',
-    name: '紫霞公寓1号楼',
-  },
-  {
-    id: 'building-2',
-    name: '紫霞公寓2号楼',
-  },
+const buildingList = ref([])
+
+const bannerImages = [
+  '/images/banner/banner-01-building.png',
+  '/images/banner/banner-02-rooftop.jpg',
+  '/images/banner/banner-03-table.jpg',
+  '/images/banner/banner-04-doll.jpg',
+  '/images/banner/banner-05-corner.jpg',
+  '/images/banner/banner-06-swing.jpg',
+  '/images/banner/banner-07-tea.jpg',
+  '/images/banner/banner-08-plants.jpg',
+  '/images/banner/banner-09-night.jpg',
+  '/images/banner/banner-10-garden.jpg',
+  '/images/banner/banner-11-sunset.jpg',
+  '/images/banner/banner-12-turtle.jpg',
+  '/images/banner/banner-13-water.jpg',
 ]
 
 const facilityList = [
@@ -416,43 +462,63 @@ const facilityList = [
     id: 1,
     title: '24小时活动室',
     icon: '🎱',
-    image: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1200&auto=format&fit=crop',
-    description: '活动室全天开放，内置空调、台球桌等娱乐设施，适合休息、学习和朋友聚会。',
+    images: [
+      '/images/facilities/activity-room-1.png',
+      '/images/facilities/activity-room-2.png',
+    ],
+    description: '活动室24小时开放，配有沙发、电视、跑步机等休闲设施，适合休息、娱乐和朋友小聚。',
   },
   {
     id: 2,
     title: '顶楼超大晒场',
     icon: '🌇',
-    image: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1200&auto=format&fit=crop',
-    description: '顶楼空间宽敞，可以晾晒衣物，也可以作为日常休闲活动空间。',
+    images: [
+      '/images/facilities/rooftop-1.jpg',
+      '/images/facilities/rooftop-2.jpg',
+      '/images/facilities/rooftop-3.jpg',
+    ],
+    description: '顶楼晒场宽敞通透，日常晾晒方便，也能作为休闲活动空间，白天夜晚都有不同氛围。',
   },
   {
     id: 3,
     title: '智能门锁',
     icon: '🔐',
-    image: 'https://images.unsplash.com/photo-1558002038-1055907df827?q=80&w=1200&auto=format&fit=crop',
-    description: '公寓配备智能门锁，提高日常出入安全性，也让租客生活更加便利。',
+    images: [
+      '/images/facilities/smart-lock-1.jpg',
+      '/images/facilities/smart-lock-2.jpg',
+    ],
+    description: '房间配备智能门锁，进出更方便，也提升日常居住安全感。',
   },
   {
     id: 4,
     title: '电梯出行',
     icon: '🛗',
-    image: 'https://images.unsplash.com/photo-1604014237800-1c9102c219da?q=80&w=1200&auto=format&fit=crop',
-    description: '楼栋内设有电梯，搬运行李和日常上下楼更加轻松。',
+    images: [
+      '/images/facilities/elevator-1.png',
+      '/images/facilities/elevator-2.png',
+    ],
+    description: '楼栋内设有电梯，搬运行李和日常上下楼更轻松，出入体验更省心。',
   },
   {
     id: 5,
-    title: '公共空调区域',
-    icon: '❄️',
-    image: 'https://images.unsplash.com/photo-1560448204-603b3fc33ddc?q=80&w=1200&auto=format&fit=crop',
-    description: '公共活动空间内设置空调，夏天和冬天都能保持舒适环境。',
+    title: '消防安全',
+    icon: '🧯',
+    images: [
+      '/images/facilities/fire-safety-1.jpg',
+      '/images/facilities/fire-safety-2.jpg',
+    ],
+    description: '楼道配备消防栓、灭火器等消防设施，公共区域保持清晰指引，让居住更安心。',
   },
   {
     id: 6,
-    title: '便利生活圈',
+    title: '交通便利',
     icon: '🚶',
-    image: 'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?q=80&w=1200&auto=format&fit=crop',
-    description: '公寓周边交通便利，到利桥古街约5分钟，生活购物都很方便。',
+    images: [
+      '/images/facilities/traffic-1.jpg',
+      '/images/facilities/traffic-2.jpg',
+      '/images/facilities/traffic-3.jpg',
+    ],
+    description: '公寓到利桥古街徒步约5分钟，周边吃喝、购物、散步都方便，日常生活半径很轻松。',
   },
 ]
 
@@ -501,68 +567,86 @@ const faqList = [
   },
 ]
 
-const roomList = ref([
-  {
-    id: 1,
-    buildingId: 'building-1',
-    roomNumber: '101',
-    type: '一室一厅',
-    area: 25,
-    rent: 6500,
-    deposit: 6500,
-    status: '可出租',
-    images: [
-      'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?q=80&w=1200&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?q=80&w=1200&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1560185007-cde436f6a4d0?q=80&w=1200&auto=format&fit=crop',
-    ],
-    description: '采光较好，适合单人或情侣居住，生活交通便利。',
-  },
-  {
-    id: 2,
-    buildingId: 'building-1',
-    roomNumber: '102',
-    type: '单身公寓',
-    area: 22,
-    rent: 6000,
-    deposit: 6000,
-    status: '可出租',
-    images: [
-      'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?q=80&w=1200&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?q=80&w=1200&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1484154218962-a197022b5858?q=80&w=1200&auto=format&fit=crop',
-    ],
-    description: '房间简洁实用，适合学生或上班族长期居住。',
-  },
-  {
-    id: 3,
-    buildingId: 'building-2',
-    roomNumber: '201',
-    type: '两室一厅',
-    area: 40,
-    rent: 8500,
-    deposit: 8500,
-    status: '可出租',
-    images: [
-      'https://images.unsplash.com/photo-1560185007-cde436f6a4d0?q=80&w=1200&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?q=80&w=1200&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?q=80&w=1200&auto=format&fit=crop',
-    ],
-    description: '空间较大，适合两人合租或小家庭居住。',
-  },
-])
+const roomList = ref([])
 
 const currentRoomList = computed(() => {
   return roomList.value.filter((room) => {
-    return room.buildingId === currentBuildingId.value && room.status === '可出租'
+    return Number(room.buildingId) === Number(currentBuildingId.value) && room.status === '可出租'
   })
 })
 
 const getAvailableRooms = (buildingId) => {
   return roomList.value.filter((room) => {
-    return room.buildingId === buildingId && room.status === '可出租'
+    return Number(room.buildingId) === Number(buildingId) && room.status === '可出租'
   })
 }
+
+const getBuildingList = async () => {
+  const res = await request.get('/buildings')
+
+  if (res.code === 200) {
+    buildingList.value = res.data || []
+
+    if (!currentBuildingId.value && buildingList.value.length > 0) {
+      currentBuildingId.value = buildingList.value[0].id
+    }
+  }
+}
+
+const getRoomList = async () => {
+  const res = await request.get('/rooms')
+
+  if (res.code === 200) {
+    roomList.value = (res.data || [])
+      .filter((room) => room.status === '可出租')
+      .map((room) => {
+        return {
+          id: room.id,
+          buildingId: room.building_id,
+          buildingName: room.building_name,
+          roomNumber: room.room_number,
+          type: room.room_type,
+          area: Number(room.area || 0),
+          rent: Number(room.monthly_rent || room.rent || 0),
+          deposit: Number(room.deposit || 0),
+          status: room.status,
+          images: room.images || [],
+          description: room.description || '房间信息已同步后台，可联系房东了解更多详情。',
+        }
+      })
+  }
+}
+
+const loadRooms = async () => {
+  roomLoading.value = true
+
+  try {
+    await getBuildingList()
+    await getRoomList()
+
+    if (
+      currentBuildingId.value &&
+      getAvailableRooms(currentBuildingId.value).length === 0
+    ) {
+      const firstAvailableBuilding = buildingList.value.find((building) => {
+        return getAvailableRooms(building.id).length > 0
+      })
+
+      if (firstAvailableBuilding) {
+        currentBuildingId.value = firstAvailableBuilding.id
+      }
+    }
+  } catch (error) {
+    console.error('获取房源失败：', error)
+    ElMessage.error('获取房源失败，请稍后刷新重试')
+  } finally {
+    roomLoading.value = false
+  }
+}
+
+onMounted(() => {
+  loadRooms()
+})
 
 const detailVisible = ref(false)
 const detailRoom = ref({})
@@ -578,7 +662,7 @@ const contactForm = reactive({
 })
 
 const goTenantLogin = () => {
-  window.location.href = 'http://localhost:5174/login'
+  window.location.href = 'https://tenant.fqzxgy.com/login'
 }
 
 const scrollToRooms = () => {
@@ -652,9 +736,23 @@ const submitContact = () => {
 }
 
 .logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
   font-size: 22px;
   font-weight: bold;
   color: #001529;
+}
+
+.logo img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+
+.logo span {
+  line-height: 1;
 }
 
 .nav {
@@ -676,16 +774,50 @@ const submitContact = () => {
 .banner {
   height: 420px;
   position: relative;
+  overflow: hidden;
+  background: #1f1f1d;
+}
 
-  background-image: url('https://images.unsplash.com/photo-1514565131-fce0801e5785?q=80&w=2070&auto=format&fit=crop');
-  background-size: cover;
-  background-position: center;
+.banner-carousel {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.banner-carousel :deep(.el-carousel__container) {
+  height: 420px;
+}
+
+.banner-carousel :deep(.el-carousel__item) {
+  height: 420px;
+}
+
+.banner-carousel img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.banner-carousel :deep(.el-carousel__indicators) {
+  z-index: 4;
+  bottom: 18px;
+}
+
+.banner-carousel :deep(.el-carousel__button) {
+  width: 26px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
 }
 
 .banner-mask {
   position: absolute;
   inset: 0;
-  background: rgba(0, 21, 41, 0.58);
+  z-index: 1;
+  background:
+    linear-gradient(90deg, rgba(0, 21, 41, 0.72), rgba(0, 21, 41, 0.28)),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.28));
 }
 
 .banner-content {
@@ -833,8 +965,8 @@ const submitContact = () => {
 
 .facility-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 22px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
 }
 
 .facility-card {
@@ -848,15 +980,26 @@ const submitContact = () => {
   transition: all 0.25s ease;
 }
 
+.facility-gallery {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 116px;
+  gap: 8px;
+  padding: 8px;
+  background: #f4efe8;
+}
+
 .facility-card:hover {
   transform: translateY(-6px);
   box-shadow: 0 14px 30px rgba(64, 158, 255, 0.16);
 }
 
 .facility-image {
-  height: 180px;
+  height: 260px;
 
   background: #ebeef5;
+  border-radius: 12px;
+  overflow: hidden;
 
   display: flex;
   align-items: center;
@@ -867,6 +1010,36 @@ const submitContact = () => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.facility-thumbs {
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.facility-thumbs img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.facility-thumbs img:only-child {
+  grid-row: 1 / -1;
+}
+
+.facility-count {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.58);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .facility-icon {
@@ -947,6 +1120,12 @@ const submitContact = () => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 22px;
+}
+
+.room-empty {
+  padding: 36px 0;
+  background: #ffffff;
+  border-radius: 14px;
 }
 
 .room-card {
@@ -1207,6 +1386,19 @@ const submitContact = () => {
   .facility-grid,
   .room-grid {
     grid-template-columns: 1fr;
+  }
+
+  .facility-gallery {
+    grid-template-columns: 1fr;
+  }
+
+  .facility-thumbs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+  }
+
+  .facility-thumbs img {
+    height: 110px;
   }
 
   .building-tabs {

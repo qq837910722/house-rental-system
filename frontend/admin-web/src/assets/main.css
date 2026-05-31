@@ -11,3 +11,112 @@ body,
   height: 100%;
   overflow: hidden;
 }
+
+:root {
+  --zixia-ink: #252523;
+  --zixia-coffee: #2d241f;
+  --zixia-deep-coffee: #1d1815;
+  --zixia-bronze: #8c5a2b;
+  --zixia-coral: #ff7b5f;
+  --zixia-yellow: #ffc61a;
+  --zixia-pink: #ffd9df;
+  --zixia-paper: #fff8ec;
+  --zixia-paper-deep: #fff0cc;
+  --zixia-line: #2f2f2d;
+}
+
+body {
+  background: var(--zixia-paper);
+  color: var(--zixia-ink);
+  font-family:
+    "Microsoft YaHei",
+    "PingFang SC",
+    "Segoe UI",
+    Arial,
+    sans-serif;
+}
+
+.el-card {
+  border: 2px solid rgba(47, 47, 45, 0.08) !important;
+  border-radius: 14px !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  box-shadow: 0 10px 24px rgba(47, 47, 45, 0.08) !important;
+}
+
+.el-card__header {
+  border-bottom: 2px solid rgba(255, 198, 26, 0.32) !important;
+  background: linear-gradient(90deg, rgba(255, 246, 222, 0.9), rgba(255, 255, 255, 0.9));
+}
+
+.el-button {
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--zixia-coral);
+  --el-button-border-color: var(--zixia-coral);
+  --el-button-hover-bg-color: #ff9279;
+  --el-button-hover-border-color: #ff9279;
+  --el-button-active-bg-color: #ea674e;
+  --el-button-active-border-color: #ea674e;
+}
+
+.el-button--success {
+  --el-button-bg-color: var(--zixia-bronze);
+  --el-button-border-color: var(--zixia-bronze);
+  --el-button-hover-bg-color: #a66f37;
+  --el-button-hover-border-color: #a66f37;
+}
+
+.el-tag {
+  border-radius: 999px !important;
+  font-weight: 700;
+}
+
+.el-table {
+  --el-table-header-bg-color: #fff0cc;
+  --el-table-header-text-color: var(--zixia-ink);
+  --el-table-row-hover-bg-color: #fff7e8;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.el-table th.el-table__cell {
+  font-weight: 800;
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  border-radius: 10px !important;
+  box-shadow: 0 0 0 1px rgba(47, 47, 45, 0.13) inset !important;
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 2px var(--zixia-coral) inset !important;
+}
+
+.page-header h1,
+.section-title h2 {
+  color: var(--zixia-ink) !important;
+  font-weight: 900 !important;
+}
+
+.page-header p,
+.section-title span {
+  color: #6f6b60 !important;
+}
+
+.filter-card,
+.table-card,
+.summary-card,
+.content-card,
+.report-card,
+.pending-card,
+.reminder-card,
+.building-card {
+  position: relative;
+}

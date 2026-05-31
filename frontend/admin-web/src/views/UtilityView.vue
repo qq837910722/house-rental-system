@@ -1,10 +1,9 @@
 <template>
   <div class="utility-page">
-    <!-- 页面标题 -->
     <div class="page-header">
       <div>
         <h1>水电管理</h1>
-        <p>管理租客水费、电费、燃气费账单，支持费用计算和缴费状态管理。</p>
+        <p>管理租客水费、电费、燃气费账单，并自动同步账单通知。</p>
       </div>
 
       <el-button type="primary" @click="openAddDialog">
@@ -12,7 +11,6 @@
       </el-button>
     </div>
 
-    <!-- 搜索筛选区 -->
     <el-card class="filter-card">
       <el-form inline>
         <el-form-item label="关键词">
@@ -25,12 +23,7 @@
         </el-form-item>
 
         <el-form-item label="楼栋">
-          <el-select
-            v-model="buildingFilter"
-            placeholder="请选择楼栋"
-            clearable
-            style="width: 180px"
-          >
+          <el-select v-model="buildingFilter" placeholder="请选择楼栋" clearable style="width: 180px">
             <el-option
               v-for="building in buildingList"
               :key="building.id"
@@ -41,12 +34,9 @@
         </el-form-item>
 
         <el-form-item label="缴费状态">
-          <el-select
-            v-model="statusFilter"
-            placeholder="请选择状态"
-            clearable
-            style="width: 160px"
-          >
+          <el-select v-model="statusFilter" placeholder="请选择状态" clearable style="width: 160px">
+            <el-option label="待确认" value="待确认" />
+            <el-option label="待缴费" value="待缴费" />
             <el-option label="未缴费" value="未缴费" />
             <el-option label="已缴费" value="已缴费" />
             <el-option label="已逾期" value="已逾期" />
@@ -55,87 +45,61 @@
       </el-form>
     </el-card>
 
-    <!-- 账单列表 -->
     <el-card class="table-card">
-      <el-table :data="filteredBillList" border style="width: 100%">
+      <el-table v-loading="tableLoading" :data="filteredBillList" border style="width: 100%">
         <el-table-column prop="billNo" label="账单编号" width="160" />
-
         <el-table-column prop="tenantName" label="租客姓名" width="120" />
-
         <el-table-column prop="buildingName" label="所属楼栋" width="160" />
-
         <el-table-column prop="roomNumber" label="房间号" width="100" />
-
         <el-table-column prop="billMonth" label="账单月份" width="120" />
 
         <el-table-column label="水费" width="110">
-          <template #default="scope">
-            ¥{{ scope.row.waterFee }}
-          </template>
+          <template #default="{ row }">¥{{ row.waterFee }}</template>
         </el-table-column>
 
         <el-table-column label="电费" width="110">
-          <template #default="scope">
-            ¥{{ scope.row.electricityFee }}
-          </template>
+          <template #default="{ row }">¥{{ row.electricityFee }}</template>
         </el-table-column>
 
         <el-table-column label="燃气费" width="110">
-          <template #default="scope">
-            ¥{{ scope.row.gasFee }}
-          </template>
+          <template #default="{ row }">¥{{ row.gasFee }}</template>
         </el-table-column>
 
         <el-table-column label="其他费用" width="110">
-          <template #default="scope">
-            ¥{{ scope.row.otherFee }}
-          </template>
+          <template #default="{ row }">¥{{ row.otherFee }}</template>
         </el-table-column>
 
         <el-table-column label="合计金额" width="130">
-          <template #default="scope">
-            <strong>¥{{ scope.row.totalAmount }}</strong>
+          <template #default="{ row }">
+            <strong>¥{{ row.totalAmount }}</strong>
           </template>
         </el-table-column>
 
         <el-table-column prop="dueDate" label="缴费截止日" width="140" />
 
         <el-table-column prop="status" label="缴费状态" width="120">
-          <template #default="scope">
-            <el-tag :type="getStatusType(scope.row.status)">
-              {{ scope.row.status }}
+          <template #default="{ row }">
+            <el-tag :type="getStatusType(row.status)">
+              {{ row.status }}
             </el-tag>
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="280" fixed="right">
-          <template #default="scope">
-            <el-button size="small" @click="openEditDialog(scope.row)">
-              编辑
-            </el-button>
-
+        <el-table-column label="操作" width="300" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="openEditDialog(row)">编辑</el-button>
             <el-button
-              v-if="scope.row.status !== '已缴费'"
+              v-if="row.status !== '已缴费'"
               size="small"
               type="success"
-              @click="markAsPaid(scope.row.id)"
+              @click="markAsPaid(row.id)"
             >
               确认缴费
             </el-button>
-
-            <el-button
-              size="small"
-              type="primary"
-              @click="sendPaymentNotice(scope.row)"
-            >
+            <el-button size="small" type="primary" @click="sendPaymentNotice(row)">
               发送通知
             </el-button>
-
-            <el-button
-              size="small"
-              type="danger"
-              @click="deleteBill(scope.row.id)"
-            >
+            <el-button size="small" type="danger" @click="deleteBill(row.id)">
               删除
             </el-button>
           </template>
@@ -143,7 +107,6 @@
       </el-table>
     </el-card>
 
-    <!-- 新增 / 编辑账单弹窗 -->
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑水电账单' : '新增水电账单'"
@@ -153,15 +116,9 @@
     >
       <el-form label-width="110px">
         <div class="form-layout">
-          <!-- 左侧：账单基础信息 -->
           <div class="form-left">
             <el-form-item label="租客" required>
-              <el-select
-                v-model="form.tenantId"
-                placeholder="请选择租客"
-                style="width: 100%"
-                @change="handleTenantChange"
-              >
+              <el-select v-model="form.tenantId" placeholder="请选择租客" style="width: 100%" @change="handleTenantChange">
                 <el-option
                   v-for="tenant in tenantList"
                   :key="tenant.id"
@@ -212,11 +169,9 @@
             </el-form-item>
 
             <el-form-item label="缴费状态" required>
-              <el-select
-                v-model="form.status"
-                placeholder="请选择状态"
-                style="width: 100%"
-              >
+              <el-select v-model="form.status" placeholder="请选择状态" style="width: 100%">
+                <el-option label="待确认" value="待确认" />
+                <el-option label="待缴费" value="待缴费" />
                 <el-option label="未缴费" value="未缴费" />
                 <el-option label="已缴费" value="已缴费" />
                 <el-option label="已逾期" value="已逾期" />
@@ -224,67 +179,44 @@
             </el-form-item>
           </div>
 
-          <!-- 中间：水电气读数 -->
           <div class="form-middle">
             <div class="section-title">水费</div>
-
             <el-form-item label="上次水表">
               <el-input v-model="form.waterPrevious" placeholder="例如：100" />
             </el-form-item>
-
             <el-form-item label="本次水表">
               <el-input v-model="form.waterCurrent" placeholder="例如：120" />
             </el-form-item>
-
             <el-form-item label="水费单价">
               <el-input v-model="form.waterUnitPrice" placeholder="例如：4" />
             </el-form-item>
-
-            <div class="calc-box">
-              用水量：{{ waterUsage }} 吨　
-              水费：¥{{ waterFee }}
-            </div>
+            <div class="calc-box">用水量：{{ waterUsage }} 吨　水费：¥{{ waterFee }}</div>
 
             <div class="section-title">电费</div>
-
             <el-form-item label="上次电表">
               <el-input v-model="form.electricityPrevious" placeholder="例如：300" />
             </el-form-item>
-
             <el-form-item label="本次电表">
               <el-input v-model="form.electricityCurrent" placeholder="例如：380" />
             </el-form-item>
-
             <el-form-item label="电费单价">
               <el-input v-model="form.electricityUnitPrice" placeholder="例如：1.2" />
             </el-form-item>
-
-            <div class="calc-box">
-              用电量：{{ electricityUsage }} 度　
-              电费：¥{{ electricityFee }}
-            </div>
+            <div class="calc-box">用电量：{{ electricityUsage }} 度　电费：¥{{ electricityFee }}</div>
           </div>
 
-          <!-- 右侧：燃气和汇总 -->
           <div class="form-right">
             <div class="section-title">燃气费</div>
-
             <el-form-item label="上次燃气表">
               <el-input v-model="form.gasPrevious" placeholder="例如：50" />
             </el-form-item>
-
             <el-form-item label="本次燃气表">
               <el-input v-model="form.gasCurrent" placeholder="例如：65" />
             </el-form-item>
-
             <el-form-item label="燃气单价">
               <el-input v-model="form.gasUnitPrice" placeholder="例如：3.5" />
             </el-form-item>
-
-            <div class="calc-box">
-              燃气用量：{{ gasUsage }} m³　
-              燃气费：¥{{ gasFee }}
-            </div>
+            <div class="calc-box">燃气用量：{{ gasUsage }} m³　燃气费：¥{{ gasFee }}</div>
 
             <el-divider />
 
@@ -293,12 +225,7 @@
             </el-form-item>
 
             <el-form-item label="备注">
-              <el-input
-                v-model="form.remark"
-                type="textarea"
-                :rows="4"
-                placeholder="例如：包含公共区域清扫费等"
-              />
+              <el-input v-model="form.remark" type="textarea" :rows="4" placeholder="例如：包含公共区域费用等" />
             </el-form-item>
 
             <div class="summary-box">
@@ -314,119 +241,21 @@
       </el-form>
 
       <template #footer>
-        <el-button @click="dialogVisible = false">
-          取消
-        </el-button>
-
-        <el-button type="primary" @click="submitForm">
-          确认
-        </el-button>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitLoading" @click="submitForm">确认</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import request from '../utils/request'
 
-// 楼栋数据
-const buildingList = ref([
-  {
-    id: 'building-1',
-    name: '紫霞公寓1号楼',
-  },
-  {
-    id: 'building-2',
-    name: '紫霞公寓2号楼',
-  },
-])
-
-// 租客数据：后面从租客管理 / 后端接口获取
-const tenantList = ref([
-  {
-    id: 1,
-    name: '张三',
-    phone: '13800000001',
-    buildingId: 'building-1',
-    buildingName: '紫霞公寓1号楼',
-    roomNumber: '101',
-  },
-  {
-    id: 2,
-    name: '王五',
-    phone: '13800000002',
-    buildingId: 'building-2',
-    buildingName: '紫霞公寓2号楼',
-    roomNumber: '201',
-  },
-])
-
-// 账单列表：前端假数据
-const billList = ref([
-  {
-    id: 1,
-    billNo: 'SD202605001',
-    tenantId: 1,
-    tenantName: '张三',
-    phone: '13800000001',
-    buildingId: 'building-1',
-    buildingName: '紫霞公寓1号楼',
-    roomNumber: '101',
-    billMonth: '2026-05',
-    waterPrevious: 100,
-    waterCurrent: 120,
-    waterUnitPrice: 4,
-    waterUsage: 20,
-    waterFee: 80,
-    electricityPrevious: 300,
-    electricityCurrent: 380,
-    electricityUnitPrice: 1.2,
-    electricityUsage: 80,
-    electricityFee: 96,
-    gasPrevious: 50,
-    gasCurrent: 65,
-    gasUnitPrice: 3.5,
-    gasUsage: 15,
-    gasFee: 52.5,
-    otherFee: 0,
-    totalAmount: 228.5,
-    dueDate: '2026-05-25',
-    status: '未缴费',
-    remark: '',
-  },
-  {
-    id: 2,
-    billNo: 'SD202605002',
-    tenantId: 2,
-    tenantName: '王五',
-    phone: '13800000002',
-    buildingId: 'building-2',
-    buildingName: '紫霞公寓2号楼',
-    roomNumber: '201',
-    billMonth: '2026-05',
-    waterPrevious: 80,
-    waterCurrent: 95,
-    waterUnitPrice: 4,
-    waterUsage: 15,
-    waterFee: 60,
-    electricityPrevious: 200,
-    electricityCurrent: 260,
-    electricityUnitPrice: 1.2,
-    electricityUsage: 60,
-    electricityFee: 72,
-    gasPrevious: 30,
-    gasCurrent: 40,
-    gasUnitPrice: 3.5,
-    gasUsage: 10,
-    gasFee: 35,
-    otherFee: 0,
-    totalAmount: 167,
-    dueDate: '2026-05-25',
-    status: '已缴费',
-    remark: '',
-  },
-])
+const buildingList = ref([])
+const tenantList = ref([])
+const billList = ref([])
 
 const searchKeyword = ref('')
 const buildingFilter = ref('')
@@ -434,6 +263,8 @@ const statusFilter = ref('')
 
 const dialogVisible = ref(false)
 const isEdit = ref(false)
+const tableLoading = ref(false)
+const submitLoading = ref(false)
 
 const form = reactive({
   id: null,
@@ -456,100 +287,131 @@ const form = reactive({
   gasUnitPrice: 3.5,
   otherFee: 0,
   dueDate: '',
-  status: '',
+  status: '待确认',
   remark: '',
 })
 
-// 数字转换
 const numberValue = (value) => {
   const num = Number(value)
-
-  if (Number.isNaN(num)) {
-    return 0
-  }
-
-  return num
+  return Number.isFinite(num) ? num : 0
 }
 
-// 计算用量
 const getUsage = (current, previous) => {
-  const usage = numberValue(current) - numberValue(previous)
-
-  if (usage < 0) {
-    return 0
-  }
-
-  return Number(usage.toFixed(2))
+  return Number(Math.max(0, numberValue(current) - numberValue(previous)).toFixed(2))
 }
 
-// 计算费用
 const getFee = (usage, unitPrice) => {
   return Number((numberValue(usage) * numberValue(unitPrice)).toFixed(2))
 }
 
-const waterUsage = computed(() => {
-  return getUsage(form.waterCurrent, form.waterPrevious)
-})
-
-const waterFee = computed(() => {
-  return getFee(waterUsage.value, form.waterUnitPrice)
-})
-
-const electricityUsage = computed(() => {
-  return getUsage(form.electricityCurrent, form.electricityPrevious)
-})
-
-const electricityFee = computed(() => {
-  return getFee(electricityUsage.value, form.electricityUnitPrice)
-})
-
-const gasUsage = computed(() => {
-  return getUsage(form.gasCurrent, form.gasPrevious)
-})
-
-const gasFee = computed(() => {
-  return getFee(gasUsage.value, form.gasUnitPrice)
-})
+const waterUsage = computed(() => getUsage(form.waterCurrent, form.waterPrevious))
+const waterFee = computed(() => getFee(waterUsage.value, form.waterUnitPrice))
+const electricityUsage = computed(() => getUsage(form.electricityCurrent, form.electricityPrevious))
+const electricityFee = computed(() => getFee(electricityUsage.value, form.electricityUnitPrice))
+const gasUsage = computed(() => getUsage(form.gasCurrent, form.gasPrevious))
+const gasFee = computed(() => getFee(gasUsage.value, form.gasUnitPrice))
 
 const totalAmount = computed(() => {
-  const total =
-    waterFee.value +
-    electricityFee.value +
-    gasFee.value +
-    numberValue(form.otherFee)
-
-  return Number(total.toFixed(2))
+  return Number((waterFee.value + electricityFee.value + gasFee.value + numberValue(form.otherFee)).toFixed(2))
 })
 
-// 搜索筛选
 const filteredBillList = computed(() => {
   return billList.value.filter((bill) => {
+    const keyword = searchKeyword.value.trim()
     const keywordMatch =
-      !searchKeyword.value ||
-      bill.tenantName.includes(searchKeyword.value) ||
-      bill.roomNumber.includes(searchKeyword.value) ||
-      bill.billNo.includes(searchKeyword.value)
-
-    const buildingMatch =
-      !buildingFilter.value ||
-      bill.buildingId === buildingFilter.value
-
-    const statusMatch =
-      !statusFilter.value ||
-      bill.status === statusFilter.value
+      !keyword ||
+      bill.tenantName.includes(keyword) ||
+      bill.roomNumber.includes(keyword) ||
+      bill.billNo.includes(keyword)
+    const buildingMatch = !buildingFilter.value || Number(bill.buildingId) === Number(buildingFilter.value)
+    const statusMatch = !statusFilter.value || bill.status === statusFilter.value
 
     return keywordMatch && buildingMatch && statusMatch
   })
 })
 
-// 自动生成账单编号
+const formatDate = (date) => {
+  if (!date) return ''
+  return String(date).slice(0, 10)
+}
+
+const mapTenant = (tenant) => ({
+  id: tenant.id,
+  name: tenant.name,
+  phone: tenant.phone,
+  buildingId: tenant.building_id,
+  buildingName: tenant.building_name,
+  roomNumber: tenant.room_number,
+})
+
+const mapBill = (bill) => ({
+  id: bill.id,
+  billNo: bill.bill_no,
+  tenantId: bill.tenant_id,
+  tenantName: bill.tenant_name || '',
+  phone: bill.tenant_phone || '',
+  buildingId: bill.building_id,
+  buildingName: bill.building_name || '',
+  roomNumber: bill.room_number || '',
+  billMonth: bill.bill_month,
+  waterPrevious: Number(bill.water_previous || 0),
+  waterCurrent: Number(bill.water_current || 0),
+  waterUnitPrice: Number(bill.water_unit_price || 0),
+  waterUsage: Number(bill.water_usage || 0),
+  waterFee: Number(bill.water_fee || 0),
+  electricityPrevious: Number(bill.electricity_previous || 0),
+  electricityCurrent: Number(bill.electricity_current || 0),
+  electricityUnitPrice: Number(bill.electricity_unit_price || 0),
+  electricityUsage: Number(bill.electricity_usage || 0),
+  electricityFee: Number(bill.electricity_fee || 0),
+  gasPrevious: Number(bill.gas_previous || 0),
+  gasCurrent: Number(bill.gas_current || 0),
+  gasUnitPrice: Number(bill.gas_unit_price || 0),
+  gasUsage: Number(bill.gas_usage || 0),
+  gasFee: Number(bill.gas_fee || 0),
+  otherFee: Number(bill.other_fee || 0),
+  totalAmount: Number(bill.total_amount || 0),
+  dueDate: formatDate(bill.due_date),
+  status: bill.status,
+  remark: bill.remark || '',
+})
+
+const getBuildingList = async () => {
+  const res = await request.get('/buildings')
+  if (res.code === 200) {
+    buildingList.value = res.data || []
+  }
+}
+
+const getTenantList = async () => {
+  const res = await request.get('/tenants')
+  if (res.code === 200) {
+    tenantList.value = (res.data || [])
+      .filter((tenant) => tenant.status === '在租' && tenant.room_number)
+      .map(mapTenant)
+  }
+}
+
+const getBillList = async () => {
+  tableLoading.value = true
+  try {
+    const res = await request.get('/utility-bills')
+    if (res.code === 200) {
+      billList.value = (res.data || []).map(mapBill)
+    }
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '获取水电账单失败')
+  } finally {
+    tableLoading.value = false
+  }
+}
+
 const generateBillNo = () => {
   const now = new Date()
   const y = now.getFullYear()
   const m = String(now.getMonth() + 1).padStart(2, '0')
   const d = String(now.getDate()).padStart(2, '0')
   const random = Math.floor(Math.random() * 900 + 100)
-
   return `SD${y}${m}${d}${random}`
 }
 
@@ -574,7 +436,7 @@ const resetForm = () => {
   form.gasUnitPrice = 3.5
   form.otherFee = 0
   form.dueDate = ''
-  form.status = '未缴费'
+  form.status = '待确认'
   form.remark = ''
 }
 
@@ -587,39 +449,38 @@ const openAddDialog = () => {
 const openEditDialog = (row) => {
   isEdit.value = true
 
-  form.id = row.id
-  form.billNo = row.billNo
-  form.tenantId = row.tenantId
-  form.tenantName = row.tenantName
-  form.phone = row.phone
-  form.buildingId = row.buildingId
-  form.buildingName = row.buildingName
-  form.roomNumber = row.roomNumber
-  form.billMonth = row.billMonth
-  form.waterPrevious = row.waterPrevious
-  form.waterCurrent = row.waterCurrent
-  form.waterUnitPrice = row.waterUnitPrice
-  form.electricityPrevious = row.electricityPrevious
-  form.electricityCurrent = row.electricityCurrent
-  form.electricityUnitPrice = row.electricityUnitPrice
-  form.gasPrevious = row.gasPrevious
-  form.gasCurrent = row.gasCurrent
-  form.gasUnitPrice = row.gasUnitPrice
-  form.otherFee = row.otherFee
-  form.dueDate = row.dueDate
-  form.status = row.status
-  form.remark = row.remark
+  Object.assign(form, {
+    id: row.id,
+    billNo: row.billNo,
+    tenantId: row.tenantId,
+    tenantName: row.tenantName,
+    phone: row.phone,
+    buildingId: row.buildingId,
+    buildingName: row.buildingName,
+    roomNumber: row.roomNumber,
+    billMonth: row.billMonth,
+    waterPrevious: row.waterPrevious,
+    waterCurrent: row.waterCurrent,
+    waterUnitPrice: row.waterUnitPrice,
+    electricityPrevious: row.electricityPrevious,
+    electricityCurrent: row.electricityCurrent,
+    electricityUnitPrice: row.electricityUnitPrice,
+    gasPrevious: row.gasPrevious,
+    gasCurrent: row.gasCurrent,
+    gasUnitPrice: row.gasUnitPrice,
+    otherFee: row.otherFee,
+    dueDate: row.dueDate,
+    status: row.status,
+    remark: row.remark,
+  })
 
   dialogVisible.value = true
 }
 
-// 选择租客后自动带出房间信息
 const handleTenantChange = (tenantId) => {
-  const tenant = tenantList.value.find((item) => item.id === tenantId)
+  const tenant = tenantList.value.find((item) => Number(item.id) === Number(tenantId))
 
-  if (!tenant) {
-    return
-  }
+  if (!tenant) return
 
   form.tenantName = tenant.name
   form.phone = tenant.phone
@@ -628,109 +489,96 @@ const handleTenantChange = (tenantId) => {
   form.roomNumber = tenant.roomNumber
 }
 
-const submitForm = () => {
-  if (
-    !form.billNo ||
-    !form.tenantId ||
-    !form.billMonth ||
-    !form.dueDate ||
-    !form.status
-  ) {
+const buildBillData = () => ({
+  bill_no: form.billNo,
+  tenant_id: form.tenantId,
+  bill_month: form.billMonth,
+  water_previous: numberValue(form.waterPrevious),
+  water_current: numberValue(form.waterCurrent),
+  water_unit_price: numberValue(form.waterUnitPrice),
+  electricity_previous: numberValue(form.electricityPrevious),
+  electricity_current: numberValue(form.electricityCurrent),
+  electricity_unit_price: numberValue(form.electricityUnitPrice),
+  gas_previous: numberValue(form.gasPrevious),
+  gas_current: numberValue(form.gasCurrent),
+  gas_unit_price: numberValue(form.gasUnitPrice),
+  other_fee: numberValue(form.otherFee),
+  due_date: form.dueDate,
+  status: form.status,
+  remark: form.remark,
+})
+
+const submitForm = async () => {
+  if (!form.billNo || !form.tenantId || !form.billMonth || !form.dueDate || !form.status) {
     ElMessage.warning('请填写必填项：租客、账单编号、账单月份、缴费截止日和缴费状态')
     return
   }
 
-  const billData = {
-    id: isEdit.value ? form.id : Date.now(),
-    billNo: form.billNo,
-    tenantId: form.tenantId,
-    tenantName: form.tenantName,
-    phone: form.phone,
-    buildingId: form.buildingId,
-    buildingName: form.buildingName,
-    roomNumber: form.roomNumber,
-    billMonth: form.billMonth,
-    waterPrevious: numberValue(form.waterPrevious),
-    waterCurrent: numberValue(form.waterCurrent),
-    waterUnitPrice: numberValue(form.waterUnitPrice),
-    waterUsage: waterUsage.value,
-    waterFee: waterFee.value,
-    electricityPrevious: numberValue(form.electricityPrevious),
-    electricityCurrent: numberValue(form.electricityCurrent),
-    electricityUnitPrice: numberValue(form.electricityUnitPrice),
-    electricityUsage: electricityUsage.value,
-    electricityFee: electricityFee.value,
-    gasPrevious: numberValue(form.gasPrevious),
-    gasCurrent: numberValue(form.gasCurrent),
-    gasUnitPrice: numberValue(form.gasUnitPrice),
-    gasUsage: gasUsage.value,
-    gasFee: gasFee.value,
-    otherFee: numberValue(form.otherFee),
-    totalAmount: totalAmount.value,
-    dueDate: form.dueDate,
-    status: form.status,
-    remark: form.remark,
-  }
+  submitLoading.value = true
+  try {
+    const billData = buildBillData()
 
-  if (isEdit.value) {
-    const index = billList.value.findIndex((item) => item.id === form.id)
-
-    if (index !== -1) {
-      billList.value[index] = billData
+    if (isEdit.value) {
+      const res = await request.put(`/utility-bills/${form.id}`, billData)
+      if (res.code === 200) ElMessage.success('水电账单修改成功')
+    } else {
+      const res = await request.post('/utility-bills', billData)
+      if (res.code === 200) ElMessage.success('新增水电账单成功，已自动发送账单通知')
     }
 
-    ElMessage.success('水电账单修改成功')
-  } else {
-    billList.value.push(billData)
-    ElMessage.success('新增水电账单成功')
+    dialogVisible.value = false
+    await getBillList()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '保存水电账单失败')
+  } finally {
+    submitLoading.value = false
   }
-
-  dialogVisible.value = false
 }
 
-const markAsPaid = (id) => {
-  const bill = billList.value.find((item) => item.id === id)
-
-  if (bill) {
-    bill.status = '已缴费'
+const markAsPaid = async (id) => {
+  const res = await request.put(`/utility-bills/${id}/status`, { status: '已缴费' })
+  if (res.code === 200) {
     ElMessage.success('已确认缴费')
+    await getBillList()
   }
 }
 
-const sendPaymentNotice = (row) => {
-  ElMessage.success(`已向 ${row.tenantName} 发送 ${row.billMonth} 水电缴费通知`)
+const sendPaymentNotice = async (row) => {
+  const res = await request.post(`/utility-bills/${row.id}/notice`)
+  if (res.code === 200) {
+    ElMessage.success(`已向 ${row.tenantName} 发送 ${row.billMonth} 水电缴费通知`)
+  }
 }
 
-const deleteBill = (id) => {
-  ElMessageBox.confirm('确定要删除这条水电账单吗？', '删除确认', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    type: 'warning',
-  })
-    .then(() => {
-      billList.value = billList.value.filter((item) => item.id !== id)
+const deleteBill = async (id) => {
+  try {
+    await ElMessageBox.confirm('确定要删除这条水电账单吗？', '删除确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+
+    const res = await request.delete(`/utility-bills/${id}`)
+    if (res.code === 200) {
       ElMessage.success('删除成功')
-    })
-    .catch(() => {
-      ElMessage.info('已取消删除')
-    })
+      await getBillList()
+    }
+  } catch (error) {
+    if (error === 'cancel') return
+    ElMessage.error(error.response?.data?.message || '删除失败')
+  }
 }
 
 const getStatusType = (status) => {
-  if (status === '已缴费') {
-    return 'success'
-  }
-
-  if (status === '未缴费') {
-    return 'warning'
-  }
-
-  if (status === '已逾期') {
-    return 'danger'
-  }
-
+  if (status === '已缴费') return 'success'
+  if (status === '待确认' || status === '待缴费' || status === '未缴费') return 'warning'
+  if (status === '已逾期') return 'danger'
   return ''
 }
+
+onMounted(async () => {
+  await Promise.all([getBuildingList(), getTenantList(), getBillList()])
+})
 </script>
 
 <style scoped>
@@ -742,7 +590,6 @@ const getStatusType = (status) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-
   margin-bottom: 20px;
 }
 
@@ -776,31 +623,24 @@ const getStatusType = (status) => {
 
 .form-right {
   flex: 1;
-
   padding: 18px;
-
   border: 1px dashed #dcdfe6;
   border-radius: 10px;
-
   background: #fafafa;
 }
 
 .section-title {
   font-size: 16px;
   font-weight: bold;
-
   margin-bottom: 12px;
-
   color: #303133;
 }
 
 .calc-box {
   margin: 8px 0 18px 110px;
   padding: 8px 12px;
-
   background: #f5f7fa;
   border-radius: 6px;
-
   color: #606266;
   font-size: 13px;
 }
@@ -808,18 +648,15 @@ const getStatusType = (status) => {
 .summary-box {
   margin-top: 20px;
   padding: 16px;
-
   background: white;
   border-radius: 8px;
   border: 1px solid #ebeef5;
-
   color: #606266;
   line-height: 1.8;
 }
 
 .summary-box .total {
   margin-top: 8px;
-
   color: #409eff;
   font-size: 20px;
   font-weight: bold;
