@@ -201,8 +201,6 @@ const pendingConfirmNotices = computed(() => {
   return noticeList.value.filter((notice) => notice.needConfirm && !notice.isConfirmed)
 })
 
-const unreadCount = computed(() => noticeList.value.filter((notice) => !notice.isRead).length)
-
 const noticeBadgeValue = computed(() => {
   const count = noticeList.value.filter((notice) => {
     return !notice.isRead || (notice.needConfirm && !notice.isConfirmed)

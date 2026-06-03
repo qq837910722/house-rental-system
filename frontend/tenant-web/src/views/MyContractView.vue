@@ -533,7 +533,7 @@ const exportContractPdf = (contract) => {
           window.onload = function () {
             window.print()
           }
-        <\/script>
+        ${'</scr' + 'ipt>'}
       </body>
     </html>
   `

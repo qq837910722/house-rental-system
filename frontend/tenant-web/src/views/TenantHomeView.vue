@@ -282,18 +282,6 @@ const mapNotice = (notice) => ({
   needConfirm: Number(notice.need_confirm) === 1 && Number(notice.is_confirmed) !== 1,
 })
 
-const getNoticeList = async () => {
-  if (!tenantId.value) return
-
-  const res = await request.get('/tenant/notices', {
-    params: { tenant_id: tenantId.value },
-  })
-
-  if (res.code === 200) {
-    noticeList.value = (res.data || []).slice(0, 3).map(mapNotice)
-  }
-}
-
 const formatDateTime = (date) => {
   if (!date) return ''
   return String(date).replace('T', ' ').slice(0, 16)
