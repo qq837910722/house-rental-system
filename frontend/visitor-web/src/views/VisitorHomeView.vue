@@ -617,12 +617,25 @@ const getRoomList = async () => {
   }
 }
 
+const withRetry = async (task, retries = 2) => {
+  try {
+    return await task()
+  } catch (error) {
+    if (retries <= 0) {
+      throw error
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    return withRetry(task, retries - 1)
+  }
+}
+
 const loadRooms = async () => {
   roomLoading.value = true
 
   try {
-    await getBuildingList()
-    await getRoomList()
+    await withRetry(getBuildingList)
+    await withRetry(getRoomList)
 
     if (
       currentBuildingId.value &&
