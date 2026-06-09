@@ -16,6 +16,7 @@ build/
 # Local deployment state
 .netlify/
 **/.netlify/
+.codex-tools/
 
 # Logs
 *.log
