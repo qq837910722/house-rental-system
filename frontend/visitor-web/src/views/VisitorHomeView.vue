@@ -30,10 +30,16 @@
         :interval="4200"
       >
         <el-carousel-item
-          v-for="image in bannerImages"
+          v-for="(image, index) in bannerImages"
           :key="image"
         >
-          <img :src="image" alt="紫霞公寓环境展示" />
+          <img
+            :src="image"
+            alt="紫霞公寓环境展示"
+            :loading="index === 0 ? 'eager' : 'lazy'"
+            :fetchpriority="index === 0 ? 'high' : 'low'"
+            decoding="async"
+          />
         </el-carousel-item>
       </el-carousel>
 
@@ -138,6 +144,8 @@
                 v-if="facility.images?.length"
                 :src="facility.images[0]"
                 :alt="facility.title"
+                loading="lazy"
+                decoding="async"
               />
 
               <div v-else class="facility-icon">
@@ -150,6 +158,8 @@
                 v-for="(image, index) in facility.images.slice(1)"
                 :key="image"
                 :src="image"
+                loading="lazy"
+                decoding="async"
                 :alt="`${facility.title}展示图${index + 2}`"
               />
             </div>
@@ -209,6 +219,8 @@
                 <img
                   :src="image"
                   alt="房间图片"
+                  loading="lazy"
+                  decoding="async"
                 />
               </el-carousel-item>
             </el-carousel>
@@ -331,6 +343,8 @@
             <img
               :src="image"
               class="detail-image"
+              loading="lazy"
+              decoding="async"
               alt="房间图片"
             />
           </el-carousel-item>
@@ -445,16 +459,7 @@ const bannerImages = [
   '/images/banner/banner-01-building.png',
   '/images/banner/banner-02-rooftop.jpg',
   '/images/banner/banner-03-table.jpg',
-  '/images/banner/banner-04-doll.jpg',
-  '/images/banner/banner-05-corner.jpg',
-  '/images/banner/banner-06-swing.jpg',
-  '/images/banner/banner-07-tea.jpg',
-  '/images/banner/banner-08-plants.jpg',
-  '/images/banner/banner-09-night.jpg',
   '/images/banner/banner-10-garden.jpg',
-  '/images/banner/banner-11-sunset.jpg',
-  '/images/banner/banner-12-turtle.jpg',
-  '/images/banner/banner-13-water.jpg',
 ]
 
 const facilityList = [
@@ -617,7 +622,7 @@ const getRoomList = async () => {
   }
 }
 
-const withRetry = async (task, retries = 2) => {
+const withRetry = async (task, retries = 0) => {
   try {
     return await task()
   } catch (error) {
@@ -634,8 +639,10 @@ const loadRooms = async () => {
   roomLoading.value = true
 
   try {
-    await withRetry(getBuildingList)
-    await withRetry(getRoomList)
+    await Promise.all([
+      withRetry(getBuildingList),
+      withRetry(getRoomList),
+    ])
 
     if (
       currentBuildingId.value &&
